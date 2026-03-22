@@ -1,5 +1,44 @@
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "WebFetch(*)",
+      "WebSearch",
+      "WebStore(*)",
+      "Bash(chmod:*)",
+      "Bash(openssl rand:*)",
+      "Bash(npx next build)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(find:*)",
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "Agent",
+      "Bash(npm install)",
+      "Bash(npm install --ignore-scripts)",
+      "Bash(npm run build 2>&1)"
+    ]
+  },
+  "enabledPlugins": {
+    "document-skills@anthropic-agent-skills": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "agent-orchestration@claude-code-workflows": true,
+    "chrome-devtools-mcp@chrome-devtools-plugins": true
   }
 }
