@@ -2,6 +2,8 @@
 
 Boilerplate de agents, commands e skills do Claude Code para projetos backend Python.
 
+> **Infra local**: este template assume stack de desenvolvimento em `~/local-infra/` (Postgres + Redis + ngrok via Docker Desktop). Credenciais e hostnames estão no [CLAUDE.md](CLAUDE.md). Para montar o stack do zero, a skill `local-infra` tem o docker-compose completo.
+
 ## O que é isso?
 
 Uma coleção de agentes especializados, comandos prontos e skills de referência pré-configurados para o Claude Code. Clone, copie pro seu projeto e comece a trabalhar — o Claude já sabe como se organizar, dividir trabalho entre agentes e seguir as convenções do projeto.
@@ -81,6 +83,7 @@ claude
 | `cloudflare` | Cloudflare API, DNS, email routing, R2 storage |
 | `seo-technical` | SEO técnico: sitemaps, meta tags, structured data |
 | `favicon` | Favicon e metadata para Next.js |
+| `local-infra` | Docker Desktop stack: Postgres + Redis + ngrok em `~/local-infra/` |
 
 ## Estrutura
 
@@ -119,10 +122,14 @@ claude
     ├── logging/
     │   ├── SKILL.md
     │   └── references/
+    ├── local-infra/
+    │   ├── SKILL.md
+    │   └── references/
     ├── cloudflare/
     ├── seo-technical/
     └── favicon/
 
+CLAUDE.md             # contexto de infra local + MCPs (lido automaticamente)
 docs/
 └── projeto/
     ├── visao-geral.md
