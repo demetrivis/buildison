@@ -1,19 +1,21 @@
 ---
 name: logging
-description: "Structured logging standards with structlog and JSON output. Use when writing logs, configuring logging, reviewing log patterns, or adding observability to code."
+description: "Structured logging standards with JSON output. Use when writing logs, configuring logging, reviewing log patterns, or adding observability to code."
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 ---
 
 # Structured Logging
 
-Padrões e convenções de logging estruturado do projeto. Toda log entry segue formato JSON com campos obrigatórios. Sem print(), sem emojis, só structlog.
+Padrões e convenções de logging estruturado do projeto. Toda log entry segue formato JSON com campos obrigatórios.
 
 ## Stack
 
-- **Biblioteca**: structlog
-- **Formato produção**: JSON (uma linha por entry)
-- **Formato dev**: Console colorido (ConsoleRenderer)
-- **Config**: `src/shared/logging.py`
+Adapte à biblioteca do projeto:
+
+- **Python**: structlog (JSON em prod, ConsoleRenderer em dev)
+- **Node.js**: pino ou winston
+- **Go**: slog ou zerolog
+- **Config**: arquivo de setup dedicado (ex: `src/shared/logging.py`, `src/lib/logger.ts`)
 
 ## Campos Obrigatórios
 
@@ -21,26 +23,20 @@ Padrões e convenções de logging estruturado do projeto. Toda log entry segue 
 {
   "event": "nome_em_snake_case",
   "level": "info",
-  "logger": "src.modulo.submodulo",
+  "logger": "caminho.do.modulo",
   "timestamp": "ISO 8601",
   "request_id": "UUID v4"
 }
 ```
 
-## Prefixo Console
-
-```
-[backend] INFO  [src.api.routers.users] user_created user_id=abc-123
-```
-
 ## Regras Invioláveis
 
-- NUNCA `print()` — sempre logger estruturado
+- NUNCA `print()` / `console.log()` / equivalente — sempre logger estruturado
 - NUNCA emojis em logs
 - NUNCA logar dados sensíveis (passwords, tokens, PII)
-- Event names em snake_case
-- Logger name espelha o module path
-- `request_id` bindado no middleware, propaga automaticamente
+- Event names em snake_case: `user_created`, `payment_failed`
+- Logger name espelha o module/file path
+- `request_id` bindado no middleware, propaga por toda a request
 
 ## Níveis
 
@@ -53,6 +49,6 @@ Padrões e convenções de logging estruturado do projeto. Toda log entry segue 
 ## References
 
 Para detalhes de implementação, consulte:
-- @references/structlog-config.md — Setup completo do structlog
+- @references/structlog-config.md — Setup completo (exemplo em Python/structlog)
 - @references/patterns.md — Padrões de logging em funções, performance, middleware
 - @references/analysis.md — Como analisar e diagnosticar logs do projeto

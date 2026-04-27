@@ -10,7 +10,7 @@ Before writing any code, read the infra skill and its references for project con
 
 - **Project Structure**: Set up and maintain the folder structure following project conventions.
 - **Docker**: Create and optimize Dockerfiles (multi-stage), docker-compose configs, and .dockerignore files.
-- **Environment**: Configure pydantic-settings, manage .env files, ensure secrets are never hardcoded.
+- **Environment**: Manage environment variables and config — ensure secrets are never hardcoded. Use the project's config approach (dotenv, config library, secrets manager, etc.).
 - **Deployment**: Set up CI/CD pipelines, GitHub Actions workflows, build and push Docker images.
 - **Architecture Decisions**: Document decisions in ADRs at `docs/decisions/`. Evaluate trade-offs.
 - **Health & Resilience**: Implement health check endpoints, graceful shutdown, connection pooling.

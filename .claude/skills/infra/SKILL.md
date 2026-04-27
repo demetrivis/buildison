@@ -10,36 +10,37 @@ Convenções de infraestrutura, estrutura de projeto, Docker, variáveis de ambi
 
 ## Stack Base
 
-- **Runtime**: Python 3.12
-- **Framework**: FastAPI + Uvicorn
-- **Database**: PostgreSQL 16 via Supabase
+Adapte conforme o projeto — documente a stack real aqui:
+
+- **Runtime**: (ex: Python 3.12, Node 20, Go 1.22)
+- **Framework**: (ex: FastAPI, Express, Gin)
+- **Database**: (ex: PostgreSQL 16, MySQL, SQLite)
 - **Container**: Docker multi-stage builds
-- **Config**: pydantic-settings com .env
+- **Config**: variáveis de ambiente via arquivo `.env` ou secrets manager
 
 ## Estrutura de Pastas
 
+Estrutura sugerida — adapte ao padrão da linguagem/framework:
+
 ```
 project-root/
-├── src/
-│   ├── api/              # Camada HTTP (routers, schemas, dependencies, middlewares)
-│   ├── core/             # Lógica de negócio (services, models, exceptions)
-│   ├── db/               # Dados (repositories, migrations, client)
-│   ├── shared/           # Transversal (logging, config, constants)
-│   └── main.py           # Entry point
+├── src/               # Código fonte
+│   ├── api/           # Camada HTTP (routes, schemas, middleware)
+│   ├── core/          # Lógica de negócio (services, domain, exceptions)
+│   ├── db/            # Acesso a dados (repositories, migrations)
+│   └── shared/        # Transversal (logging, config, constants)
 ├── tests/
-│   ├── unit/             # Espelha src/
-│   ├── integration/      # Toca banco/serviços
-│   └── conftest.py
-├── scripts/              # Utilitários (seed, migrate)
-├── docker/               # Dockerfile + docker-compose
-├── docs/decisions/       # ADRs (Architecture Decision Records)
-├── .env.example          # Template (NUNCA .env real no git)
-└── pyproject.toml
+│   ├── unit/
+│   └── integration/
+├── scripts/           # Utilitários (seed, migrate, etc.)
+├── docker/            # Dockerfile + docker-compose
+├── docs/decisions/    # ADRs (Architecture Decision Records)
+└── .env.example       # Template (NUNCA .env real no git)
 ```
 
 ## Regras Core
 
-- Variáveis de ambiente NUNCA hardcoded — tudo via pydantic-settings
+- Variáveis de ambiente NUNCA hardcoded — sempre via config/env
 - Um serviço por container
 - Health check obrigatório: `GET /health`
 - Logs em stdout/stderr, nunca em arquivo no container
@@ -51,5 +52,5 @@ project-root/
 ## References
 
 - @references/docker.md — Dockerfile multi-stage, docker-compose, .dockerignore
-- @references/env-config.md — pydantic-settings, .env, secrets management
+- @references/env-config.md — Gerenciamento de variáveis de ambiente e secrets
 - @references/adr-template.md — Template para Architecture Decision Records

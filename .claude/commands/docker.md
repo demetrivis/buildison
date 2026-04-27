@@ -4,7 +4,7 @@ You have been invoked with the `/docker` command. Your job is to create, optimiz
 
 ## Instructions
 
-1. **Assess the project**: Check what exists — Dockerfile, docker-compose.yml, .dockerignore. Understand the tech stack to choose the right base image and build strategy.
+1. **Assess the project**: Check what exists — Dockerfile, docker-compose.yml, .dockerignore. Read the project manifest (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, etc.) to understand the tech stack and choose the right base image and build strategy.
 
 2. **Determine the need**: Is the user creating a new Dockerfile, optimizing an existing one, debugging a build failure, or setting up a full docker-compose environment?
 
@@ -14,43 +14,66 @@ You have been invoked with the `/docker` command. Your job is to create, optimiz
 
 ### Multi-stage builds (default approach)
 
+Always use multi-stage builds to separate build dependencies from the runtime image. Adapt the base image and install commands to the project's stack:
+
+**Python**
 ```dockerfile
-# ============================================
-# Stage 1: Build
-# ============================================
 FROM python:3.12-slim AS builder
-
 WORKDIR /app
-
-# Dependencies first (cache layer)
 COPY pyproject.toml .
 RUN pip install --no-cache-dir --prefix=/install .
 
-# ============================================
-# Stage 2: Runtime
-# ============================================
 FROM python:3.12-slim
-
-# Security: non-root user
 RUN groupadd -r app && useradd -r -g app -d /app -s /sbin/nologin app
-
 WORKDIR /app
-
-# Copy only installed packages
 COPY --from=builder /install /usr/local
 COPY src/ src/
-
-# Own files as app user
 RUN chown -R app:app /app
 USER app
-
-# Health check
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
-
 EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+**Node.js**
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json .
+RUN npm ci --only=production
+
+FROM node:20-alpine
+RUN addgroup -S app && adduser -S app -G app
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY src/ src/
+RUN chown -R app:app /app
+USER app
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1
+EXPOSE 3000
+CMD ["node", "src/index.js"]
+```
+
+**Go**
+```dockerfile
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum .
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server
+
+FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
+WORKDIR /app
+COPY --from=builder /app/server .
+USER app
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost:8080/health || exit 1
+EXPOSE 8080
+CMD ["./server"]
 ```
 
 ### .dockerignore (always create alongside Dockerfile)
@@ -61,14 +84,19 @@ CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
 .claude
 .env
 .env.*
+# Python
 __pycache__
 *.pyc
 .pytest_cache
 .mypy_cache
 .ruff_cache
-node_modules
 .venv
 venv
+# Node
+node_modules
+.next
+dist
+# Generic
 docker-compose*.yml
 Dockerfile*
 README.md
@@ -82,7 +110,7 @@ scripts/
 ### Build best practices
 
 - **Order layers by change frequency**: dependencies first (cached), source code last (changes often)
-- **Slim/Alpine base images**: `python:3.12-slim`, `node:20-alpine` — never use full images in production
+- **Slim/Alpine base images**: `python:3.12-slim`, `node:20-alpine`, `golang:1.22-alpine` — never use full images in production
 - **No root**: always create and switch to a non-root user
 - **Single process per container**: never run multiple services in one container
 - **HEALTHCHECK**: always include one
@@ -177,11 +205,6 @@ services:
 docker build -t app:latest -f docker/Dockerfile .
 ```
 
-### Build with build args
-```bash
-docker build --build-arg PYTHON_VERSION=3.12 -t app:latest .
-```
-
 ### Tag and push to GHCR
 ```bash
 docker tag app:latest ghcr.io/user/repo:latest
@@ -217,16 +240,9 @@ When reviewing or optimizing a Dockerfile:
 5. No root user? (USER directive present)
 6. HEALTHCHECK defined?
 7. No secrets in the image? (use build secrets or env vars at runtime)
-8. --no-cache-dir on pip install?
+8. Cache-friendly install commands? (pip: `--no-cache-dir`, npm: `npm ci`)
 9. Combined RUN commands where possible? (reduce layers)
 10. COPY specific paths, not COPY . .? (better cache invalidation)
-
-## Subagent Usage
-
-For complex Docker setups, spawn subagents:
-- **Multi-service**: 1 subagent per Dockerfile when the project has multiple services
-- **Optimization**: 1 subagent to analyze the current image size and layers, another to rewrite the Dockerfile
-- **Migration**: 1 subagent to read the existing deployment config, another to write the Docker equivalent
 
 ## Rules
 

@@ -6,22 +6,24 @@ You have been invoked with the `/ghaction` command. Your job is to create, edit,
 
 1. **Understand the need**: Determine what the user wants automated — CI, CD, tests, linting, Docker builds, deploy, release, scheduled tasks, etc.
 
-2. **Check existing workflows**: Read `.github/workflows/` to see what already exists. Don't duplicate or conflict with existing workflows.
+2. **Detect the stack**: Read the project manifest (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, etc.) to determine the language and toolchain. This determines the setup actions and commands to use.
 
-3. **Create the workflow**: Write the YAML file in `.github/workflows/`. Follow the conventions below.
+3. **Check existing workflows**: Read `.github/workflows/` to see what already exists. Don't duplicate or conflict with existing workflows.
 
-4. **Validate**: After writing, check the YAML syntax and ensure all referenced secrets, actions, and paths are correct.
+4. **Create the workflow**: Write the YAML file in `.github/workflows/`. Follow the conventions below.
+
+5. **Validate**: After writing, check the YAML syntax and ensure all referenced secrets, actions, and paths are correct.
 
 ## Workflow Conventions
 
 ### File naming
 ```
 .github/workflows/
-├── ci.yml              # Testes + lint em PRs e pushes
-├── cd.yml              # Deploy automatico
-├── docker-build.yml    # Build e push de imagem Docker
-├── release.yml         # Criacao de release
-└── scheduled.yml       # Tarefas agendadas (cron)
+├── ci.yml              # Tests + lint on PRs and pushes
+├── cd.yml              # Automated deploy
+├── docker-build.yml    # Docker image build and push
+├── release.yml         # Release creation
+└── scheduled.yml       # Cron tasks
 ```
 
 ### Structure pattern
@@ -38,13 +40,10 @@ on:
 permissions:
   contents: read
 
-env:
-  PYTHON_VERSION: "3.12"
-  NODE_VERSION: "20"
-
 jobs:
   job-name:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -54,17 +53,17 @@ jobs:
 
 ### Best practices
 
-- **Always pin action versions** with full SHA or major version: `actions/checkout@v4`
+- **Always pin action versions** with major version: `actions/checkout@v4`
 - **Set minimal permissions**: `permissions: contents: read` by default, expand only as needed
 - **Use environment variables** for versions and repeated values
-- **Cache dependencies**: use `actions/cache@v4` or built-in caching in setup actions
+- **Cache dependencies**: use built-in caching in setup actions
 - **Fail fast**: `strategy.fail-fast: true` in matrix builds
 - **Timeout**: always set `timeout-minutes` to prevent runaway jobs
 - **Secrets**: reference via `${{ secrets.NAME }}`, never hardcode
 
 ### Common workflow templates
 
-**CI — Tests + Lint**:
+**CI — Python (pytest + ruff + mypy)**:
 ```yaml
 name: CI
 
@@ -100,6 +99,76 @@ jobs:
 
       - name: Tests
         run: pytest tests/ -v --tb=short
+```
+
+**CI — Node.js (vitest/jest + eslint + tsc)**:
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+```
+
+**CI — Go**:
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+
+      - name: Tests
+        run: go test ./... -v
 ```
 
 **Docker Build + Push**:
@@ -153,7 +222,7 @@ jobs:
 
 **Scheduled task**:
 ```yaml
-name: Scheduled Cleanup
+name: Scheduled Task
 
 on:
   schedule:
@@ -163,21 +232,14 @@ permissions:
   contents: read
 
 jobs:
-  cleanup:
+  run:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Run cleanup
-        run: python scripts/cleanup.py
+      - name: Run task
+        run: <command>
 ```
-
-## Subagent Usage
-
-For complex CI/CD setups, spawn subagents:
-- **Multi-workflow setup**: 1 subagent per workflow file when creating multiple workflows at once
-- **Debugging**: 1 subagent to analyze failed workflow runs via `gh run view` and `gh run view --log`
-- **Migration**: 1 subagent to read the old CI config (Jenkins, CircleCI, etc.) and another to write the GitHub Actions equivalent
 
 ## Rules
 

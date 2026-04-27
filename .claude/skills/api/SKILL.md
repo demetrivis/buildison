@@ -1,32 +1,33 @@
 ---
 name: api
-description: "FastAPI conventions: routing, schemas, error handling, dependencies, and HTTP contracts. Use when creating endpoints, designing request/response schemas, handling errors, or working with middlewares."
+description: "HTTP layer conventions: routing, schemas/DTOs, error handling, middleware, and API contracts. Use when creating endpoints, designing request/response schemas, handling errors, or working with middlewares."
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 ---
 
 # API / HTTP
 
-Convenções da camada HTTP do projeto. FastAPI + Pydantic v2 + Uvicorn.
+Convenções da camada HTTP do projeto. Adapte à framework em uso (FastAPI, Express, Hono, Gin, etc.).
 
 ## Estrutura
 
 ```
-src/api/
-├── routers/          # Um arquivo por domínio
-├── schemas/          # Request/response Pydantic models
-├── dependencies/     # FastAPI Depends() (auth, db session)
-└── middlewares/       # Logging, CORS, error handling
+<src>/
+└── api/
+    ├── routes/       # Um arquivo por domínio
+    ├── schemas/      # Request/response models (Pydantic, Zod, class-validator, etc.)
+    ├── middleware/   # Logging, CORS, auth, error handling
+    └── deps/         # Injeção de dependências (auth, db session, etc.)
 ```
 
 ## Regras Core
 
-- Todas as rotas sob `/api/v1/`
-- Routers NÃO contêm lógica de negócio — delegam para services
+- Todas as rotas sob `/api/v1/` (ou conforme convenção do projeto)
+- Route handlers NÃO contêm lógica de negócio — delegam para services
 - Schemas de request e response SEMPRE separados
 - Todo endpoint com side-effect precisa de autenticação
 - Paginação obrigatória em listas: `page`, `page_size`, `total`
 - IDs em path params, filtros em query params, dados em body
-- Erros retornam `{"detail": "mensagem legível"}`
+- Erros retornam `{"detail": "mensagem legível"}` ou formato equivalente do projeto
 
 ## Status Codes
 
@@ -44,6 +45,6 @@ src/api/
 
 ## References
 
-- @references/routers.md — Padrão completo de router com exemplos
-- @references/schemas.md — Pydantic v2 schemas, validação, serialização
-- @references/error-handling.md — Error handlers, domain-to-HTTP mapping, dependencies
+- @references/routers.md — Padrão completo de route handler com exemplos
+- @references/schemas.md — Schemas de validação, serialização
+- @references/error-handling.md — Error handlers, domain-to-HTTP mapping, middleware
