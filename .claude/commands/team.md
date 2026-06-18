@@ -8,96 +8,144 @@ This is NOT about subagents. Subagents run inside your session and report back t
 
 Use teammates when the work requires collaboration, debate, or coordination between workers. Use subagents when you just need quick results reported back.
 
+## Mandatory First Step
+
+Before designing a team:
+
+1. Detect the project stack.
+2. Read `CLAUDE.md` if it exists.
+3. Inspect project manifests:
+   - `package.json`
+   - `go.mod`
+   - `pyproject.toml`
+   - `Cargo.toml`
+4. Identify framework and architecture.
+5. Build teammates that match the actual stack.
+
+Never assume NestJS, Go, Python, React, Prisma or any other technology without evidence.
+
+## Stack-Aware Team Design
+
+### NestJS
+
+Typical teammates:
+
+- nestjs-architect
+- controller-owner
+- service-owner
+- prisma-owner
+- test-writer
+- security-reviewer
+
+### Go
+
+Typical teammates:
+
+- golang-architect
+- handler-owner
+- service-owner
+- repository-owner
+- test-writer
+- performance-reviewer
+
+### FastAPI
+
+Typical teammates:
+
+- api-owner
+- service-owner
+- database-owner
+- test-writer
+- security-reviewer
+
+### Mixed Projects
+
+If the project contains multiple runtimes:
+
+Example:
+
+- NestJS API
+- Go worker
+- Redis
+- PostgreSQL
+
+Create teammates aligned to boundaries instead of technologies:
+
+- api-owner
+- worker-owner
+- database-owner
+- infra-owner
+- test-owner
+
 ## When to Create a Team
 
 Create a team when:
+
 - The task has 2+ independent workstreams that benefit from parallel execution
-- Workers need to communicate findings to each other (not just to you)
-- The task benefits from adversarial review — teammates challenging each other's work
-- The work spans multiple layers (frontend, backend, infra, tests) that each need a dedicated owner
+- Workers need to communicate findings to each other
+- The task benefits from adversarial review
+- The work spans multiple layers
 - Investigation requires competing hypotheses explored simultaneously
 
 Do NOT create a team when:
-- The task is sequential and each step depends on the previous
-- Multiple workers would edit the same files (causes conflicts)
-- The task is simple enough for a single session or subagents
-- The overhead of coordination would exceed the benefit
+
+- Work is sequential
+- Workers would edit the same files
+- Task is small enough for a single session
+- Coordination overhead exceeds value
+
+## File Ownership Rule
+
+Every teammate must have explicit ownership.
+
+Bad:
+
+- backend-dev
+- backend-dev-2
+
+Good:
+
+- owns `src/modules/users/*`
+- owns `src/modules/auth/*`
+- owns `internal/payments/*`
+- owns `tests/e2e/*`
+
+No overlapping ownership unless the goal is review.
 
 ## Instructions
 
-1. **Analyze the task**: Understand what the user needs. Identify independent workstreams, potential for parallel work, and whether teammates need to talk to each other.
+1. Analyze task.
+2. Detect stack.
+3. Decide whether teammates are justified.
+4. Define teammate roles.
+5. Define file ownership.
+6. Define deliverables.
+7. Explain the plan.
+8. Create the team.
+9. Coordinate progress.
+10. Synthesize results.
 
-2. **Design the team**: For each teammate, define:
-   - A clear role and name (e.g., "security-reviewer", "backend-architect", "test-writer")
-   - Specific responsibilities and deliverables
-   - Which files or areas they own (avoid overlap to prevent conflicts)
-   - Whether they need plan approval before making changes
+## Review Teams
 
-3. **Size the team right**: Start with 3-5 teammates for most tasks. Aim for 5-6 tasks per teammate. More teammates means more coordination overhead and token cost — only scale when the work genuinely benefits.
+For reviews, create specialized reviewers:
 
-4. **Explain your plan**: Before creating the team, briefly describe:
-   - How many teammates and their roles
-   - Why a team is better than subagents or a single session for this task
-   - How the work divides across teammates without file conflicts
+- security-reviewer
+- performance-reviewer
+- architecture-reviewer
+- testing-reviewer
 
-5. **Create the team**: Use natural language to instruct the creation of the agent team. Each teammate should receive a clear spawn prompt with full context about their role, the project, and what they need to deliver.
-
-6. **Coordinate**: Monitor teammate progress, redirect if needed, and synthesize results as they come in.
-
-## Team Design Examples
-
-**Feature implementation across layers**:
-```
-Create an agent team for the new notifications feature:
-- "api-owner": owns src/api/notifications/, builds endpoints and schemas
-- "service-owner": owns src/services/notifications/, implements business logic
-- "db-owner": owns migrations and src/models/notification.py, designs schema and queries
-- "test-writer": owns tests/notifications/, writes tests as the others build
-Have them communicate progress so the test-writer can start writing tests as soon as interfaces are defined.
-```
-
-**Debugging with competing hypotheses**:
-```
-Users report the app exits after one message instead of staying connected.
-Spawn 4 agent teammates to investigate different hypotheses.
-Have them talk to each other to try to disprove each other's theories,
-like a scientific debate. Update findings as consensus emerges.
-```
-
-**Parallel code review**:
-```
-Create an agent team to review PR #142:
-- One focused on security implications
-- One checking performance impact
-- One validating test coverage
-Have them each review and share findings with each other.
-```
-
-**Research and architecture**:
-```
-I'm designing a real-time sync engine. Create an agent team:
-- "researcher": explores existing approaches (CRDTs, OT, etc.)
-- "architect": designs the system based on our constraints
-- "devils-advocate": challenges every design decision
-Have them debate and converge on a recommendation.
-```
-
-## Key Differences from Subagents
-
-| Aspect | Subagents | Teammates (Agent Teams) |
-|--------|-----------|------------------------|
-| Context | Share your context, report back to you | Own context window, fully independent |
-| Communication | Only talk to you | Message each other directly |
-| Coordination | You manage everything | Shared task list, self-coordinate |
-| Best for | Quick focused tasks, results only | Complex work needing collaboration |
-| Token cost | Lower | Higher (each is a separate Claude instance) |
+Each reviewer should challenge assumptions made by the others.
 
 ## Rules
 
-- Always check that `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is enabled before attempting to create a team
-- Divide file ownership so no two teammates edit the same file
-- Give each teammate enough context in their spawn prompt — they don't inherit your conversation history
-- For risky changes, require plan approval before teammates make modifications
-- If a teammate gets stuck, intervene directly or spawn a replacement
-- When done, clean up the team properly through the leader session
-- If the task doesn't justify a team, say so and handle it directly or use subagents instead
+- Always check that `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is enabled
+- Detect stack before creating teammates
+- Divide ownership to avoid conflicts
+- Teammates do not inherit conversation history
+- Give complete context in spawn prompts
+- Require approval before risky modifications
+- Replace stuck teammates when necessary
+- Clean up teams after completion
+- If teammates are not justified, do not create them
+
+$ARGUMENTS
