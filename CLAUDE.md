@@ -1,79 +1,60 @@
-# buildison — contexto do projeto
+# buildison — camada Claude Code
 
-Boilerplate de `.claude/` (agents, commands, skills) para projetos backend Python. Este arquivo descreve a infraestrutura local e MCPs disponíveis, de forma que qualquer projeto que herde este template já saiba o setup.
+O Claude Code não lê AGENTS.md sozinho, então este arquivo **importa as duas camadas** e adiciona o que é
+específico do Claude Code:
 
-## Infraestrutura local (Docker Desktop)
+- **`@AGENTS.md`** — regras **permanentes** da construção (toolbox, infra, memory policy). Não muda por projeto.
+- **`@docs/agent/context.md`** — contexto **dinâmico** do projeto (stack, comandos, arquitetura). O agente mantém.
 
-Stack roda em containers do Docker Desktop, acessível via `host.docker.internal` quando o próprio consumidor está em container, ou `localhost` quando roda direto no host.
+@AGENTS.md
 
-### Postgres
+@docs/agent/context.md
 
-- Host: `host.docker.internal:5432` (de dentro de container) / `localhost:5432` (do host)
-- User: `dev`
-- Senha: `localdev`
-- Connection string: `postgresql://dev:localdev@host.docker.internal:5432/<database>`
+## MCPs globais (Claude Code, `~/.claude.json`)
 
-### Redis
-
-- Host: `host.docker.internal:6379` (de dentro de container) / `localhost:6379` (do host)
-- Sem auth local
-- Connection string: `redis://host.docker.internal:6379/0`
-
-### ngrok
-
-- Usado para expor endpoints HTTP locais (webhooks, integrações externas) com URL pública temporária
-- Sobe via docker-compose junto com o stack
-
-### Subir / derrubar
-
-```bash
-cd ~/local-infra
-docker compose up -d      # sobe Postgres + Redis + ngrok
-docker compose down       # derruba tudo (mantém volumes)
-docker compose logs -f    # acompanha logs
-```
-
-Para montar o `~/local-infra/docker-compose.yml` do zero, use a skill `local-infra` — ela tem o compose completo com healthchecks, volumes nomeados, tunnel do ngrok e variáveis de ambiente já definidas.
-
-## MCPs globais disponíveis
-
-Já configurados em `~/.claude.json` — disponíveis em qualquer projeto:
+Disponíveis em qualquer projeto neste cliente — **não** existem em outros agentes:
 
 - `MCP_DOCKER` — Docker Engine, Redis, Postgres, Playwright, Context7
 - `claude_ai_Supabase` — Supabase (projects, migrations, SQL, edge functions)
 - `plugin_github_github` — GitHub (PRs, issues, repos)
-- `plugin_context7_context7` — documentação de libs (React, Next.js, Prisma, etc)
+- `plugin_context7_context7` — documentação de libs (atende o papel do "Context7" da toolbox)
 - `plugin_chrome-devtools-mcp_chrome-devtools` — debug e automação de browser
 - `claude_ai_ClickUp` — ClickUp (tasks, docs, time tracking)
 - `claude_ai_Cloudflare_Developer_Platform` — Cloudflare (DNS, D1, KV, R2, Workers)
 - `claude_ai_Google_Drive_2` / `claude_ai_Google_Calendar` / `claude_ai_Gmail` — Workspace
 - `claude_ai_Postman` — Postman (collections, specs, mocks)
 
-Se um projeto específico precisar de MCP extra, cria um `.mcp.json` na raiz dele — o Claude Code carrega automaticamente.
+MCP extra por projeto: `.mcp.json` na raiz (Claude Code carrega após aprovação no primeiro `/mcp`).
 
-## Fluxo de carregamento
+## O que o Claude Code carrega no boot
 
 ```
-Abre Claude Code no projeto
-        ↓
-~/.claude.json                (global — MCPs)
-~/.claude/settings.json       (global — permissões, plugins)
-./CLAUDE.md                   (este arquivo — contexto do projeto)
-./.claude/settings.json       (projeto — overrides)
-./.mcp.json                   (projeto — MCPs extras, se houver)
-        ↓
-Claude já tem todo o contexto
+~/.claude.json            (global — MCPs do cliente)
+~/.claude/settings.json   (global — permissões, plugins)
+./CLAUDE.md               (este arquivo)  ──@import──>  ./AGENTS.md  (fonte única)
+./.claude/settings.json   (projeto — overrides)
+./.mcp.json               (projeto — toolbox: spec-workflow, serena, qdrant-memory)
 ```
+
+Carregam **sozinhos**: `CLAUDE.md` (+ o `@AGENTS.md` importado) e **descrições** de skills/agents/MCPs.
+Carregam **sob demanda**: corpo das skills (quando acionadas), agents (quando spawnados),
+`docs/agent/*.md` (quando lidos), schemas de MCP (quando a tool é usada).
 
 ## Estrutura deste repo
 
 ```
-.claude/
-├── agents/         # db, api, logic, infra, logger, security-auditor
+AGENTS.md              # PERMANENTE: regras + infra + toolbox (vem do buildison, não muda por projeto)
+CLAUDE.md              # bridge Claude Code → @AGENTS.md + @docs/agent/context.md
+.mcp.json              # toolbox MCP (spec-workflow, serena, qdrant-memory)
+.spec-workflow/        # templates de requirements/design/tasks
+.claude/               # PERMANENTE: máquina do boilerplate
+├── agents/         # db, api, logic, infra, logger, security-auditor, golang, prisma, nestjs, postgrest
 ├── commands/       # /commit, /push, /pr, /docker, /team, ...
-└── skills/         # database, api, infra, logging, local-infra, ...
+└── skills/         # database, api, infra, logging, local-infra, agent-memory, spec-workflow, golang, nestjs, prisma, postgrest, ...
 
-docs/claude-overview/  # documentação do template (visão geral, como usar)
+docs/
+├── agent/            # DINÂMICO: context.md (mapa do projeto) + decisions.md (log) — o agente mantém
+└── claude-overview/  # documentação do template
 ```
 
 Ver `README.md` para a lista completa de agents, commands e skills.
