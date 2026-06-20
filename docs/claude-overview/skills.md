@@ -100,6 +100,16 @@ Favicon e metadata.
 **References:**
 - `nextjs-metadata.md` — Metadata e favicons no Next.js
 
+### agent-memory/
+
+Memória vetorial persistente do agente via Qdrant (MCP `qdrant-memory`): estratégia de collections por
+projeto, payload de metadados, política do que guardar/nunca guardar. Pareia com a infra Qdrant da skill `local-infra`.
+
+### spec-workflow/
+
+Planejamento estruturado de features via SpecWorkflow MCP: requirements → design → tasks → implementação →
+validação. Templates em `.spec-workflow/templates/`. Para features não triviais, em vez de codar direto.
+
 ## Como adicionar uma nova skill
 
 1. Crie a pasta: `.claude/skills/nome-da-skill/`

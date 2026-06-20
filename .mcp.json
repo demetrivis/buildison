@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "spec-workflow": {
+      "command": "npx",
+      "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."]
+    },
+    "serena": {
+      "command": "serena",
+      "args": ["start-mcp-server", "--context", "claude-code", "--project", "."]
+    },
+    "qdrant-memory": {
+      "command": "uvx",
+      "args": ["mcp-server-qdrant"],
+      "env": {
+        "QDRANT_URL": "http://localhost:6333",
+        "COLLECTION_NAME": "agent_project_main",
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      }
+    }
+  }
+}
