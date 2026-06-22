@@ -23,7 +23,7 @@ regras permanentes; lá fica o que muda.
 
 Stack Docker Desktop **global** em `~/local-infra/` — sobe uma vez e atende **todos os projetos da máquina**.
 Hostname: `host.docker.internal` (de dentro de container) / `localhost` (direto no host).
-Credenciais locais podem ficar no repo — o stack nunca é exposto além da máquina.
+As credenciais abaixo são **exemplos de dev local** (o stack nunca é exposto além da máquina) — defina as suas no `~/local-infra/.env`.
 
 ### Postgres
 
