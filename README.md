@@ -23,11 +23,11 @@ recebe só o "glue" no formato nativo dele.
 npx buildison install --dir . --agents claude,codex,opencode
 
 # ou clone + script (engine)
-git clone git@github.com:xanfrO/buildison.git && cd buildison
+git clone git@github.com:demetrivis/buildison.git && cd buildison
 ./install.sh --dir /caminho/do/seu/projeto
 
 # ou remoto (clona sozinho)
-curl -fsSL https://raw.githubusercontent.com/xanfrO/buildison/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
 ```
 
 Sem flags, ele roda **interativo** (pergunta destino e agentes). O que cada agente recebe:

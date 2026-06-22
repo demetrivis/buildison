@@ -6,13 +6,13 @@
 #   ./install.sh                          # interativo, instala no diretório atual
 #   ./install.sh --dir ~/code/meu-projeto # escolhe o destino
 #   ./install.sh --agents claude,codex,opencode --yes
-#   curl -fsSL https://raw.githubusercontent.com/xanfrO/buildison/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
 #
 # Agentes suportados: claude, codex, opencode
 #
 set -euo pipefail
 
-REPO_URL="https://github.com/xanfrO/buildison.git"
+REPO_URL="https://github.com/demetrivis/buildison.git"
 
 # ---------- helpers ----------
 c_reset='\033[0m'; c_bold='\033[1m'; c_grn='\033[32m'; c_ylw='\033[33m'; c_cyn='\033[36m'; c_red='\033[31m'
