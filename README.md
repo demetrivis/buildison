@@ -57,6 +57,43 @@ npx buildison install --dir . --agents claude --infra --serena
 
 Use `--no-infra` / `--no-serena` para pular sem perguntar. Depois é só `cd ~/local-infra && docker compose up -d`.
 
+#### MCPs de banco (Postgres + Redis) — opcional, por projeto
+
+O agente pode consultar Postgres e Redis direto. **Não vêm por padrão** (nem todo projeto usa banco) — adicione
+quando precisar. Duas formas:
+
+**Opção 1 — Standalone no config do agente** (portável: Claude, Codex, OpenCode). Os "oficiais" antigos foram
+arquivados; use estes:
+
+`.mcp.json` (Claude Code):
+```jsonc
+"redis":    { "command": "uvx", "args": ["redis-mcp-server@latest", "--url", "redis://localhost:6379/0"] },
+"postgres": { "command": "uvx", "args": ["postgres-mcp", "--access-mode=restricted"],
+              "env": { "DATABASE_URI": "postgresql://dev:<SENHA>@localhost:5432/<DATABASE>" } }
+```
+`~/.codex/config.toml` (Codex):
+```toml
+[mcp_servers.redis]
+command = "uvx"
+args = ["redis-mcp-server@latest", "--url", "redis://localhost:6379/0"]
+[mcp_servers.postgres]
+command = "uvx"
+args = ["postgres-mcp", "--access-mode=restricted"]
+env = { DATABASE_URI = "postgresql://dev:<SENHA>@localhost:5432/<DATABASE>" }
+```
+`opencode.json` (OpenCode/Hermes): mesma ideia, dentro de `"mcp"`, com `"type": "local"` e `"command": [...]`.
+
+> `--access-mode=restricted` = só leitura/ops seguras (recomendado pro agente). Troque por `unrestricted` se precisar escrever.
+> ⚠️ **Senha:** o `<SENHA>` fica no arquivo. Em repo **público**, **não** commite a senha real — use placeholder e
+> preencha local, ou vá de Docker Toolkit (abaixo), que guarda o secret no Keychain.
+
+**Opção 2 — Docker MCP Toolkit** (secret no Keychain, sem senha em arquivo; serve Claude, Codex e OpenCode):
+```bash
+printf '%s' "<SENHA>" | docker mcp secret set POSTGRES_PASSWORD   # secret no Keychain do OS
+# habilite os servers Postgres/Redis no Docker Desktop → MCP Toolkit (ou via `docker mcp`)
+docker mcp client connect claude-code     # e/ou: codex, opencode
+```
+
 ### Manual (só Claude Code)
 
 ```bash
