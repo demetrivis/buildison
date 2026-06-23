@@ -24,6 +24,11 @@ warn() { printf "${c_ylw}!${c_reset} %s\n" "$*"; }
 err()  { printf "${c_red}✗${c_reset} %s\n" "$*" >&2; }
 die()  { err "$*"; exit 1; }
 
+# read que funciona mesmo via pipe (curl | bash): lê do terminal de controle (/dev/tty),
+# não do stdin — que, num pipe, é o próprio script. Sem tty (CI), retorna vazio (default).
+HAVE_TTY=0; [ -r /dev/tty ] && HAVE_TTY=1
+prompt_read() { if [ "$HAVE_TTY" -eq 1 ]; then read -r "$1" < /dev/tty || true; fi; }
+
 # senha aleatória forte (openssl se houver; senão /dev/urandom)
 gen_password() {
   if command -v openssl >/dev/null 2>&1; then openssl rand -hex 24
@@ -206,7 +211,7 @@ ok "Fonte: $SRC_DIR"
 # ---------- destino ----------
 if [ -z "$TARGET_DIR" ]; then
   if [ "$ASSUME_YES" -eq 1 ]; then TARGET_DIR="$PWD"; else
-    printf "Diretório do projeto [%s]: " "$PWD"; read -r ans || true
+    printf "Diretório do projeto [%s]: " "$PWD"; prompt_read ans
     TARGET_DIR="${ans:-$PWD}"
   fi
 fi
@@ -220,7 +225,7 @@ if [ -z "$AGENTS_CSV" ] && [ "$ASSUME_YES" -eq 0 ]; then
   echo ""
   printf "${c_bold}Quais agentes configurar?${c_reset}\n"
   printf "  1) Claude Code\n  2) Codex\n  3) OpenCode/Hermes\n  4) Todos\n"
-  printf "Escolha (ex: 1,2 ou 4): "; read -r sel || true
+  printf "Escolha (ex: 1,2 ou 4): "; prompt_read sel
   case ",${sel}," in *4*) AGENTS_CSV="claude,codex,opencode";; esac
   [ -z "$AGENTS_CSV" ] && {
     case ",${sel}," in *,1,*) AGENTS_CSV="${AGENTS_CSV}claude,";; esac
@@ -240,7 +245,7 @@ if [ -z "$SETUP_INFRA" ]; then
     printf "${c_bold}Montar o local-infra (stack global da máquina)?${c_reset}\n"
     printf "  Um stack Docker único (Postgres + Redis + Qdrant + tunnels) que sobe UMA vez e\n"
     printf "  serve TODOS os seus projetos — o Qdrant guarda a memória dos agentes. Senhas aleatórias.\n"
-    printf "  (pule se já tem, ou se não usa Docker) [s/N]: "; read -r r || true
+    printf "  (pule se já tem, ou se não usa Docker) [s/N]: "; prompt_read r
     case "$r" in [sSyY]*) SETUP_INFRA=1;; *) SETUP_INFRA=0;; esac
   fi
 fi
@@ -249,7 +254,7 @@ if [ -z "$SETUP_SERENA" ]; then
     echo ""
     printf "${c_bold}Instalar o Serena (navegação semântica do código)?${c_reset}\n"
     printf "  CLI no host via uv (não é container). Necessário pro MCP 'serena' conectar.\n"
-    printf "  [s/N]: "; read -r r || true
+    printf "  [s/N]: "; prompt_read r
     case "$r" in [sSyY]*) SETUP_SERENA=1;; *) SETUP_SERENA=0;; esac
   fi
 fi

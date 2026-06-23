@@ -18,19 +18,31 @@ Um comando configura a toolbox no seu projeto para **Claude Code, Codex e/ou Ope
 uma fonte única (`AGENTS.md` + `.claude/` + `docs/agent/` + `.mcp.json`). Sem duplicar conteúdo: cada agente
 recebe só o "glue" no formato nativo dele.
 
+**Mac / Linux** (bash):
 ```bash
 # npx direto do GitHub (não precisa de conta npm)
 npx github:demetrivis/buildison install --dir . --agents claude,codex,opencode
 
-# ou remoto via curl (clona sozinho)
+# ou remoto via curl (clona sozinho, interativo)
 curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
 
-# ou clone + script (engine)
+# ou clone + script
 git clone https://github.com/demetrivis/buildison.git && cd buildison
 bash install.sh --dir /caminho/do/seu/projeto
 ```
 
-> No Windows, rode via **Git Bash** (`bash install.sh`), não pelo PowerShell/duplo-clique.
+**Windows** (PowerShell — instalador nativo `install.ps1`):
+```powershell
+# interativo (pergunta destino + agentes) — rode na pasta do projeto
+irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1 | iex
+
+# ou clone + script com flags
+git clone https://github.com/demetrivis/buildison.git; cd buildison
+.\install.ps1 -Dir C:\caminho\do\projeto -Agents claude,codex,opencode -Infra -Serena
+```
+
+> No PowerShell o interativo funciona nativo (`Read-Host`). O `curl | bash`/`npx` também rodam no Windows, mas
+> só via **Git Bash** (no PowerShell puro o `bash` não existe). Não dê duplo-clique nos scripts.
 
 Sem flags, ele roda **interativo** (pergunta destino e agentes). O que cada agente recebe:
 

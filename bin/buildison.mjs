@@ -19,7 +19,10 @@ if (args[0] === 'install') args.shift(); // aceita "buildison install ..." e "bu
 
 const res = spawnSync('bash', [script, ...args], { stdio: 'inherit' });
 if (res.error && res.error.code === 'ENOENT') {
-  console.error('bash não encontrado. No Windows, use Git Bash ou WSL.');
+  console.error('bash não encontrado.');
+  console.error('No Windows, use o instalador nativo do PowerShell:');
+  console.error('  irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1 | iex');
+  console.error('(ou rode este npx dentro do Git Bash / WSL)');
   process.exit(1);
 }
 process.exit(res.status ?? 1);
