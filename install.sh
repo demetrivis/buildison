@@ -6,9 +6,11 @@
 #   ./install.sh                          # interativo, instala no diretório atual
 #   ./install.sh --dir ~/code/meu-projeto # escolhe o destino
 #   ./install.sh --agents claude,codex,opencode --yes
+#   ./install.sh --infra                  # também monta o local-infra (stack global)
 #   curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
 #
 # Agentes suportados: claude, codex, opencode
+# Flags: --dir <path> --agents <lista> --infra/--no-infra --yes --force
 #
 set -euo pipefail
 
@@ -22,18 +24,166 @@ warn() { printf "${c_ylw}!${c_reset} %s\n" "$*"; }
 err()  { printf "${c_red}✗${c_reset} %s\n" "$*" >&2; }
 die()  { err "$*"; exit 1; }
 
+# senha aleatória forte (openssl se houver; senão /dev/urandom)
+gen_password() {
+  if command -v openssl >/dev/null 2>&1; then openssl rand -hex 24
+  else LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 40; echo; fi
+}
+
+INFRA_PGPASS=""  # preenchido por setup_local_infra (usado no resumo)
+# Monta o stack global ~/local-infra (Postgres + Redis + Qdrant + ngrok + cloudflared)
+setup_local_infra() {
+  local dir="$HOME/local-infra"
+  if [ -d "$dir" ] && [ "$FORCE" -eq 0 ]; then
+    warn "local-infra já existe em $dir (pulando). Use --force pra recriar."
+    return 0
+  fi
+  mkdir -p "$dir/postgres-init"
+  INFRA_PGPASS="$(gen_password)"
+  cat > "$dir/.env" <<EOF
+# Gerado pelo buildison installer — credenciais do stack local (dev only)
+POSTGRES_PASSWORD=${INFRA_PGPASS}
+# Tunnels (opcionais): preencha se for usar
+NGROK_AUTHTOKEN=
+CLOUDFLARE_TUNNEL_TOKEN=
+EOF
+  cat > "$dir/postgres-init/01-extensions.sql" <<'SQL'
+-- Roda uma vez, quando o volume é criado do zero.
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+-- Databases por projeto (além do 'dev' default):
+-- CREATE DATABASE projeto_x OWNER dev;
+SQL
+  # compose: a senha vem do .env via ${POSTGRES_PASSWORD} (heredoc com aspas = sem expansão)
+  cat > "$dir/docker-compose.yml" <<'YAML'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: local-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: dev
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [local-infra]
+
+  redis:
+    image: redis:7-alpine
+    container_name: local-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [local-infra]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: local-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [local-infra]
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: local-ngrok
+    restart: unless-stopped
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command: "http --log=stdout host.docker.internal:8000"
+    ports:
+      - "4040:4040"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [local-infra]
+    depends_on: [postgres, redis]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: local-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [local-infra]
+
+volumes:
+  postgres-data: { name: local-postgres-data }
+  redis-data:    { name: local-redis-data }
+  qdrant-data:   { name: local-qdrant-data }
+
+networks:
+  local-infra: { name: local-infra, driver: bridge }
+YAML
+  ok "local-infra criado em $dir (senha do Postgres gerada aleatoriamente)"
+}
+
+# Instala o Serena no host (via uv) — é CLI, não container
+setup_serena() {
+  if ! command -v uv >/dev/null 2>&1; then
+    warn "uv não encontrado — pulei o Serena. Instale uv (https://docs.astral.sh/uv) e rode:"
+    warn "  uv tool install -p 3.13 serena-agent && serena init"
+    return 0
+  fi
+  if command -v serena >/dev/null 2>&1 && [ "$FORCE" -eq 0 ]; then
+    ok "Serena já instalado ($(command -v serena))"; return 0
+  fi
+  info "Instalando Serena (uv tool install serena-agent)..."
+  if uv tool install -p 3.13 serena-agent >/dev/null 2>&1; then
+    serena init >/dev/null 2>&1 || true
+    ok "Serena instalado e inicializado"
+  else
+    warn "Falha ao instalar o Serena — rode manualmente: uv tool install -p 3.13 serena-agent"
+  fi
+}
+
 # ---------- args ----------
 TARGET_DIR=""
 AGENTS_CSV=""
 ASSUME_YES=0
 FORCE=0
+SETUP_INFRA=""    # "" = perguntar; 1 = sim; 0 = não
+SETUP_SERENA=""   # idem
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dir)    TARGET_DIR="${2:-}"; shift 2;;
-    --agents) AGENTS_CSV="${2:-}"; shift 2;;
-    --yes|-y) ASSUME_YES=1; shift;;
-    --force)  FORCE=1; shift;;
-    -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --dir)       TARGET_DIR="${2:-}"; shift 2;;
+    --agents)    AGENTS_CSV="${2:-}"; shift 2;;
+    --infra)     SETUP_INFRA=1; shift;;
+    --no-infra)  SETUP_INFRA=0; shift;;
+    --serena)    SETUP_SERENA=1; shift;;
+    --no-serena) SETUP_SERENA=0; shift;;
+    --yes|-y)    ASSUME_YES=1; shift;;
+    --force)     FORCE=1; shift;;
+    -h|--help)   sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "Argumento desconhecido: $1 (use --help)";;
   esac
 done
@@ -82,6 +232,27 @@ fi
 case ",$AGENTS_CSV," in *,claude,*|*claude*) SEL_CLAUDE=1;; esac
 case ",$AGENTS_CSV," in *codex*) SEL_CODEX=1;; esac
 case ",$AGENTS_CSV," in *opencode*) SEL_OPENCODE=1;; esac
+
+# ---------- pré-requisitos da máquina (uma vez por máquina, opt-in) ----------
+if [ -z "$SETUP_INFRA" ]; then
+  if [ "$ASSUME_YES" -eq 1 ]; then SETUP_INFRA=0; else
+    echo ""
+    printf "${c_bold}Montar o local-infra (stack global da máquina)?${c_reset}\n"
+    printf "  Um stack Docker único (Postgres + Redis + Qdrant + tunnels) que sobe UMA vez e\n"
+    printf "  serve TODOS os seus projetos — o Qdrant guarda a memória dos agentes. Senhas aleatórias.\n"
+    printf "  (pule se já tem, ou se não usa Docker) [s/N]: "; read -r r || true
+    case "$r" in [sSyY]*) SETUP_INFRA=1;; *) SETUP_INFRA=0;; esac
+  fi
+fi
+if [ -z "$SETUP_SERENA" ]; then
+  if [ "$ASSUME_YES" -eq 1 ]; then SETUP_SERENA=0; else
+    echo ""
+    printf "${c_bold}Instalar o Serena (navegação semântica do código)?${c_reset}\n"
+    printf "  CLI no host via uv (não é container). Necessário pro MCP 'serena' conectar.\n"
+    printf "  [s/N]: "; read -r r || true
+    case "$r" in [sSyY]*) SETUP_SERENA=1;; *) SETUP_SERENA=0;; esac
+  fi
+fi
 
 # nome da collection do Qdrant derivado do projeto
 PROJ_NAME="$(basename "$TARGET_DIR" | tr '[:upper:] -' '[:lower:]__' | tr -cd 'a-z0-9_')"
@@ -199,14 +370,31 @@ EOF
   ok "OpenCode: AGENTS.md (lido nativamente da raiz do projeto)"
 fi
 
+# ---------- pré-requisitos da máquina (execução) ----------
+[ "$SETUP_INFRA" = "1" ]  && { echo ""; info "Montando local-infra..."; setup_local_infra; }
+[ "$SETUP_SERENA" = "1" ] && { echo ""; info "Configurando Serena..."; setup_serena; }
+
 # ---------- resumo ----------
 echo ""
 ok "Instalação concluída em $TARGET_DIR"
+
+if [ -n "$INFRA_PGPASS" ]; then
+  echo ""
+  printf "${c_bold}local-infra criado — guarde a credencial:${c_reset}\n"
+  echo "  Postgres user: dev"
+  echo "  Postgres senha: ${INFRA_PGPASS}"
+  echo "  (salva em ~/local-infra/.env · connection: postgresql://dev:${INFRA_PGPASS}@localhost:5432/<db>)"
+fi
+
 echo ""
 printf "${c_bold}Próximos passos:${c_reset}\n"
-echo "  1. Infra:   cd ~/local-infra && docker compose up -d   (Qdrant precisa estar no ar)"
-echo "  2. Serena:  uv tool install -p 3.13 serena-agent && serena init"
-[ "$SEL_CLAUDE" -eq 1 ]   && echo "  3. Claude:  abra o projeto e rode /mcp para aprovar os servidores"
-[ "$SEL_CODEX" -eq 1 ]    && echo "  3. Codex:   abra o projeto (lê AGENTS.md); MCP já está em ~/.codex/config.toml"
+if [ "$SETUP_INFRA" = "1" ]; then
+  echo "  1. Subir a infra:  cd ~/local-infra && docker compose up -d"
+else
+  echo "  1. Infra (se ainda não tem):  rode de novo com --infra, ou suba seu ~/local-infra"
+fi
+[ "$SETUP_SERENA" = "1" ] || echo "  2. Serena (se for usar):  uv tool install -p 3.13 serena-agent && serena init"
+[ "$SEL_CLAUDE" -eq 1 ]   && echo "  3. Claude:   abra o projeto e rode /mcp para aprovar os servidores"
+[ "$SEL_CODEX" -eq 1 ]    && echo "  3. Codex:    abra o projeto (lê AGENTS.md); MCP já está em ~/.codex/config.toml"
 [ "$SEL_OPENCODE" -eq 1 ] && echo "  3. OpenCode: abra o projeto (lê AGENTS.md + opencode.json)"
 echo "  4. Preencha docs/agent/context.md com o stack real do projeto."

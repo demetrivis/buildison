@@ -44,8 +44,18 @@ Sem flags, ele roda **interativo** (pergunta destino e agentes). O que cada agen
 O instalador é **idempotente**: não sobrescreve `docs/agent/context.md` (seu conhecimento do projeto) nem
 duplica o bloco MCP do Codex. Use `--force` para regravar os arquivos gerados.
 
-Depois de instalar: suba a infra (`cd ~/local-infra && docker compose up -d`), instale o Serena
-(`uv tool install -p 3.13 serena-agent && serena init`) e abra o projeto no seu agente.
+#### Pré-requisitos da máquina (opt-in, uma vez por máquina)
+
+No modo interativo o instalador também pergunta se quer montar os pré-requisitos globais — ou passe as flags:
+
+```bash
+npx buildison install --dir . --agents claude --infra --serena
+```
+
+- **`--infra`** → monta o `~/local-infra/` (Postgres + Redis + Qdrant + ngrok + cloudflared) com **senha do Postgres gerada aleatoriamente** (salva em `~/local-infra/.env` e mostrada no fim). Sobe uma vez, serve todos os projetos.
+- **`--serena`** → instala o Serena no host via `uv` (`uv tool install -p 3.13 serena-agent && serena init`).
+
+Use `--no-infra` / `--no-serena` para pular sem perguntar. Depois é só `cd ~/local-infra && docker compose up -d`.
 
 ### Manual (só Claude Code)
 
