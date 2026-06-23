@@ -1,6 +1,12 @@
 # Claude Code local settings
 .claude/settings.local.json
 
+# Worktrees de agente (transitórias)
+.claude/worktrees/
+
+# Artefatos de empacotamento npm
+*.tgz
+
 # OS
 .DS_Store
 Thumbs.db

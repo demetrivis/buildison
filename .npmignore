@@ -1,0 +1,12 @@
+# Worktrees de agente (transitórias — não fazem parte do pacote)
+.claude/worktrees/
+
+# Artefatos
+*.tgz
+*.log
+.DS_Store
+
+# Infra/estado local que não deve ir pro npm
+.spec-workflow/specs/
+.spec-workflow/user-templates/
+.mcp.json

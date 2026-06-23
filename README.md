@@ -19,16 +19,18 @@ uma fonte única (`AGENTS.md` + `.claude/` + `docs/agent/` + `.mcp.json`). Sem d
 recebe só o "glue" no formato nativo dele.
 
 ```bash
-# npx (estilo bmad)
-npx buildison install --dir . --agents claude,codex,opencode
+# npx direto do GitHub (não precisa de conta npm)
+npx github:demetrivis/buildison install --dir . --agents claude,codex,opencode
+
+# ou remoto via curl (clona sozinho)
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
 
 # ou clone + script (engine)
-git clone git@github.com:demetrivis/buildison.git && cd buildison
-./install.sh --dir /caminho/do/seu/projeto
-
-# ou remoto (clona sozinho)
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
+git clone https://github.com/demetrivis/buildison.git && cd buildison
+bash install.sh --dir /caminho/do/seu/projeto
 ```
+
+> No Windows, rode via **Git Bash** (`bash install.sh`), não pelo PowerShell/duplo-clique.
 
 Sem flags, ele roda **interativo** (pergunta destino e agentes). O que cada agente recebe:
 
