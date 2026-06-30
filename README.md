@@ -83,6 +83,22 @@ npx buildison install --memory=vps --qdrant-url=https://qdrant.seu-dominio.com
 
 A escolha é **per-máquina** (salva em `~/.buildison/vps.env`) — novos projetos herdam. Modo VPS gera `.mcp.json` (e equivalente Codex/OpenCode) com `QDRANT_API_KEY` lida do **ambiente do shell** (não vai pro Git). Setup completo da VPS (Traefik/Caddy + HTTPS + key): [`docs/infra/qdrant-vps-template.md`](docs/infra/qdrant-vps-template.md).
 
+#### Trocar de modo num projeto já instalado
+
+```bash
+# muda só os configs MCP do projeto (preserva .claude/, AGENTS.md, docs/agent)
+npx buildison switch --memory=vps --qdrant-url=https://qdrant.seu-dominio.com
+npx buildison switch --memory=local
+```
+
+Faz backup automático (`*.bak.<timestamp>`) e atualiza os 3 agentes (Claude/Codex/OpenCode). Reinicie o Claude depois.
+
+### Agente `suporte` (diagnóstico)
+
+`.claude/agents/suporte.md` é especialista no setup — sabe diagnosticar `/mcp · failed`, troca de modo, migração de memória entre instâncias Qdrant, e API key não-expandida. Acione em linguagem natural quando algo travar:
+
+> *"a memória não está conectando, vê o que tá errado com o suporte"*
+
 #### MCPs de banco (Postgres + Redis) — opcional, por projeto
 
 O agente pode consultar Postgres e Redis direto. **Não vêm por padrão** (nem todo projeto usa banco) — adicione

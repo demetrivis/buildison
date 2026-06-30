@@ -1,21 +1,30 @@
 #!/usr/bin/env node
-// Wrapper npx do buildison — delega para o engine install.sh (validado).
-// Uso: npx buildison install [--dir <path>] [--agents claude,codex,opencode] [--yes] [--force]
+// Wrapper npx do buildison — delega para os scripts bash.
+// Subcomandos:
+//   install [opts]   → install.sh   (instala a toolbox; default se nenhum subcomando)
+//   switch  [opts]   → switch.sh    (troca .mcp.json do projeto atual entre local/vps)
+//   --help / -h      → ajuda do install.sh
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const script = join(pkgRoot, 'install.sh');
-
-if (!existsSync(script)) {
-  console.error('install.sh não encontrado no pacote buildison.');
-  process.exit(1);
-}
+const scripts = {
+  install: join(pkgRoot, 'install.sh'),
+  switch:  join(pkgRoot, 'switch.sh'),
+};
 
 const args = process.argv.slice(2);
-if (args[0] === 'install') args.shift(); // aceita "buildison install ..." e "buildison ..."
+const first = args[0];
+let sub = 'install';
+if (first && Object.prototype.hasOwnProperty.call(scripts, first)) { sub = first; args.shift(); }
+
+const script = scripts[sub];
+if (!existsSync(script)) {
+  console.error(`${sub}: script não encontrado no pacote buildison (esperado em ${script}).`);
+  process.exit(1);
+}
 
 const res = spawnSync('bash', [script, ...args], { stdio: 'inherit' });
 if (res.error && res.error.code === 'ENOENT') {
