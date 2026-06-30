@@ -85,10 +85,21 @@ A escolha é **per-máquina** (salva em `~/.buildison/vps.env`) — novos projet
 
 #### Trocar de modo num projeto já instalado
 
+Muda só os configs MCP do projeto (preserva `.claude/`, `AGENTS.md`, `docs/agent/`).
+
+**Mac/Linux / Git Bash:**
 ```bash
-# muda só os configs MCP do projeto (preserva .claude/, AGENTS.md, docs/agent)
 npx buildison switch --memory=vps --qdrant-url=https://qdrant.seu-dominio.com
 npx buildison switch --memory=local
+```
+
+**Windows (PowerShell nativo):**
+```powershell
+# local: clone do repo
+.\switch.ps1 -Memory vps -QdrantUrl https://qdrant.seu-dominio.com
+# remoto (sem clonar) — passe os args via $env:BUILDISON_ARGS:
+$env:BUILDISON_ARGS = '-Memory vps -QdrantUrl https://qdrant.seu-dominio.com -Yes'
+irm https://raw.githubusercontent.com/demetrivis/buildison/main/switch.ps1 | iex
 ```
 
 Faz backup automático (`*.bak.<timestamp>`) e atualiza os 3 agentes (Claude/Codex/OpenCode). Reinicie o Claude depois.
