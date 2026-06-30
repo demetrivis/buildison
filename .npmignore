@@ -10,3 +10,7 @@
 .spec-workflow/specs/
 .spec-workflow/user-templates/
 .mcp.json
+
+# Docs pessoais (têm IPs/domínios) — só *-template.md vai pro pacote
+docs/infra/qdrant-vps-setup.md
+docs/infra/REMOTE-*.md

@@ -17,6 +17,8 @@ param(
   [switch]$NoInfra,
   [switch]$Serena,
   [switch]$NoSerena,
+  [ValidateSet('','local','vps')] [string]$Memory = "",
+  [string]$QdrantUrl = "",
   [switch]$Yes,
   [switch]$Force,
   [switch]$Help
@@ -92,6 +94,44 @@ $doSerena = if ($Serena) { $true } elseif ($NoSerena) { $false } elseif ($Yes) {
   (Read-Host "  [s/N]") -match '^[sSyY]'
 }
 
+# ---------- modo de memória (local vs VPS) — config per-máquina em ~/.buildison/vps.env ----------
+$bldCfgDir = Join-Path $env:USERPROFILE '.buildison'
+$bldCfg    = Join-Path $bldCfgDir 'vps.env'
+if (-not $Memory -or -not $QdrantUrl) {
+  if (Test-Path $bldCfg) {
+    Get-Content $bldCfg | ForEach-Object {
+      if ($_ -match '^\s*BUILDISON_MEMORY_MODE=(.+)$' -and -not $Memory)   { $Memory = $Matches[1].Trim() }
+      if ($_ -match '^\s*BUILDISON_QDRANT_URL=(.+)$'  -and -not $QdrantUrl) { $QdrantUrl = $Matches[1].Trim() }
+    }
+  }
+}
+if (-not $Memory) {
+  if ($Yes) { $Memory = 'local' } else {
+    Write-Host "`nOnde fica a memória (Qdrant) deste e dos próximos projetos desta máquina?" -ForegroundColor White
+    Write-Host "  1) Local - http://localhost:6333 (do ~/local-infra). Simples; memória só nesta máquina."
+    Write-Host "  2) VPS   - HTTPS público com api-key. Memória segue você entre máquinas."
+    Write-Host "  (essa escolha é salva em $bldCfg e vale pra novos projetos.)"
+    $mm = Read-Host "Escolha [1]"
+    $Memory = if ($mm -eq '2') { 'vps' } else { 'local' }
+  }
+}
+if ($Memory -eq 'vps' -and -not $QdrantUrl) {
+  if ($Yes) { Die '-Memory vps requer -QdrantUrl <URL> em modo -Yes.' }
+  $QdrantUrl = Read-Host "URL do Qdrant na VPS (ex: https://qdrant.seu-dominio.com)"
+  if (-not $QdrantUrl) { Die 'URL vazia.' }
+}
+# persiste a escolha
+New-Item -ItemType Directory -Force -Path $bldCfgDir | Out-Null
+@"
+# Config per-maquina do buildison - apague o arquivo pra ser perguntado de novo.
+BUILDISON_MEMORY_MODE=$Memory
+BUILDISON_QDRANT_URL=$QdrantUrl
+"@ | Set-Content -Path $bldCfg -Encoding UTF8
+Ok "Config per-maquina: $bldCfg"
+
+$qUrl = if ($Memory -eq 'vps') { $QdrantUrl } else { 'http://localhost:6333' }
+Info "Memoria: $Memory ($qUrl)"
+
 # collection do Qdrant derivada do nome do projeto
 $projName = (Split-Path $Target -Leaf).ToLower() -replace '[^a-z0-9_]','_'
 if (-not $projName) { $projName = 'project_main' }
@@ -157,7 +197,12 @@ md/json/yaml/toml/config/texto.) Quando esta seção conflitar com as descriçõ
 '@
   Set-Content -Path (Join-Path $Target 'CLAUDE.md') -Value $claudeMd -Encoding UTF8; Ok "CLAUDE.md"
 
-  $mcp = @'
+  $qEnvJson = if ($Memory -eq 'vps') {
+    '{ "QDRANT_URL": "__QURL__", "QDRANT_API_KEY": "${QDRANT_API_KEY}", "COLLECTION_NAME": "__COLLECTION__", "EMBEDDING_MODEL": "__EMBED__" }'
+  } else {
+    '{ "QDRANT_URL": "__QURL__", "COLLECTION_NAME": "__COLLECTION__", "EMBEDDING_MODEL": "__EMBED__" }'
+  }
+  $mcp = @"
 {
   "mcpServers": {
     "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] },
@@ -165,12 +210,12 @@ md/json/yaml/toml/config/texto.) Quando esta seção conflitar com as descriçõ
     "qdrant-memory": {
       "command": "uvx",
       "args": ["mcp-server-qdrant"],
-      "env": { "QDRANT_URL": "http://localhost:6333", "COLLECTION_NAME": "__COLLECTION__", "EMBEDDING_MODEL": "__EMBED__" }
+      "env": $qEnvJson
     }
   }
 }
-'@
-  $mcp = $mcp.Replace('__COLLECTION__', $collection).Replace('__EMBED__', $Embed)
+"@
+  $mcp = $mcp.Replace('__QURL__', $qUrl).Replace('__COLLECTION__', $collection).Replace('__EMBED__', $Embed)
   Set-Content -Path (Join-Path $Target '.mcp.json') -Value $mcp -Encoding UTF8; Ok ".mcp.json"
 }
 
@@ -197,7 +242,7 @@ args = ["start-mcp-server", "--context", "codex", "--project-from-cwd"]
 [mcp_servers.qdrant-memory]
 command = "uvx"
 args = ["mcp-server-qdrant"]
-env = { QDRANT_URL = "http://localhost:6333", COLLECTION_NAME = "$collection", EMBEDDING_MODEL = "$Embed" }
+$(if ($Memory -eq 'vps') { "env = { QDRANT_URL = `"$qUrl`", QDRANT_API_KEY = `"`${QDRANT_API_KEY}`", COLLECTION_NAME = `"$collection`", EMBEDDING_MODEL = `"$Embed`" }" } else { "env = { QDRANT_URL = `"$qUrl`", COLLECTION_NAME = `"$collection`", EMBEDDING_MODEL = `"$Embed`" }" })
 # <<< buildison ($projName) <<<
 "@
     Add-Content -Path $codexCfg -Value $block
@@ -210,22 +255,27 @@ env = { QDRANT_URL = "http://localhost:6333", COLLECTION_NAME = "$collection", E
 if ($selOpencode) {
   Info "Configurando OpenCode/Hermes..."
   $ocCfg = Join-Path $Target 'opencode.json'
-  $oc = @'
+  $ocQEnv = if ($Memory -eq 'vps') {
+    '{ "QDRANT_URL": "__QURL__", "QDRANT_API_KEY": "${QDRANT_API_KEY}", "COLLECTION_NAME": "__COLLECTION__", "EMBEDDING_MODEL": "__EMBED__" }'
+  } else {
+    '{ "QDRANT_URL": "__QURL__", "COLLECTION_NAME": "__COLLECTION__", "EMBEDDING_MODEL": "__EMBED__" }'
+  }
+  $oc = @"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "`$schema": "https://opencode.ai/config.json",
   "mcp": {
     "spec-workflow": { "type": "local", "command": ["npx", "-y", "@pimzino/spec-workflow-mcp@latest", "."], "enabled": true },
     "serena": { "type": "local", "command": ["serena", "start-mcp-server", "--context", "ide", "--project-from-cwd"], "enabled": true },
     "qdrant-memory": {
       "type": "local",
       "command": ["uvx", "mcp-server-qdrant"],
-      "environment": { "QDRANT_URL": "http://localhost:6333", "COLLECTION_NAME": "__COLLECTION__", "EMBEDDING_MODEL": "__EMBED__" },
+      "environment": $ocQEnv,
       "enabled": true
     }
   }
 }
-'@
-  $oc = $oc.Replace('__COLLECTION__', $collection).Replace('__EMBED__', $Embed)
+"@
+  $oc = $oc.Replace('__QURL__', $qUrl).Replace('__COLLECTION__', $collection).Replace('__EMBED__', $Embed)
   if ((Test-Path $ocCfg) -and -not $Force) {
     Set-Content -Path (Join-Path $Target 'opencode.buildison.json') -Value $oc -Encoding UTF8
     Warn "opencode.json já existe — gravei opencode.buildison.json; faça merge do bloco mcp manualmente."
@@ -346,9 +396,21 @@ if ($infraPass) {
   Write-Host "  Postgres senha: $infraPass"
   Write-Host "  (em ~/local-infra/.env · conn: postgresql://dev:$infraPass@localhost:5432/<db>)"
 }
+if ($Memory -eq 'vps') {
+  Write-Host "`nMemoria: VPS ($qUrl)" -ForegroundColor White
+  Write-Host "  O .mcp.json usa `${QDRANT_API_KEY} (expandida do AMBIENTE do shell que abre o claude)."
+  Write-Host "  Exporte a key UMA vez antes de rodar:"
+  Write-Host "    `$env:QDRANT_API_KEY = '<sua-api-key>'     # por sessao (PowerShell)"
+  Write-Host "    [Environment]::SetEnvironmentVariable('QDRANT_API_KEY','<sua-api-key>','User')  # persistente"
+  Write-Host "  Doc: docs/infra/qdrant-vps-template.md (no buildison)"
+}
 Write-Host "`nPróximos passos:" -ForegroundColor White
-if ($doInfra) { Write-Host "  1. Subir infra:  cd `$HOME\local-infra; docker compose up -d" }
-else          { Write-Host "  1. Infra (se for usar): rode de novo com -Infra" }
+if ($Memory -eq 'local') {
+  if ($doInfra) { Write-Host "  1. Subir infra:  cd `$HOME\local-infra; docker compose up -d" }
+  else          { Write-Host "  1. Infra (se for usar): rode de novo com -Infra" }
+} else {
+  Write-Host "  1. Garanta que a VPS Qdrant esta no ar (HTTPS) e QDRANT_API_KEY exportada"
+}
 if (-not $doSerena) { Write-Host "  2. Serena (se for usar): uv tool install -p 3.13 serena-agent; serena init" }
 if ($selClaude)   { Write-Host "  3. Claude:   abra o projeto e rode /mcp pra aprovar os servidores" }
 if ($selCodex)    { Write-Host "  3. Codex:    abra o projeto (lê AGENTS.md); MCP em ~/.codex/config.toml" }

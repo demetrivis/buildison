@@ -69,6 +69,20 @@ npx buildison install --dir . --agents claude --infra --serena
 
 Use `--no-infra` / `--no-serena` para pular sem perguntar. Depois é só `cd ~/local-infra && docker compose up -d`.
 
+#### Memória: local vs VPS (escolha uma vez por máquina)
+
+A memória vetorial dos agentes (Qdrant) pode rodar **local** (default) ou **na sua VPS** (segue você entre máquinas):
+
+```bash
+# Local (default) — usa http://localhost:6333 do ~/local-infra
+npx buildison install --memory=local
+
+# VPS — usa https://qdrant.<seu-dominio> com API key
+npx buildison install --memory=vps --qdrant-url=https://qdrant.seu-dominio.com
+```
+
+A escolha é **per-máquina** (salva em `~/.buildison/vps.env`) — novos projetos herdam. Modo VPS gera `.mcp.json` (e equivalente Codex/OpenCode) com `QDRANT_API_KEY` lida do **ambiente do shell** (não vai pro Git). Setup completo da VPS (Traefik/Caddy + HTTPS + key): [`docs/infra/qdrant-vps-template.md`](docs/infra/qdrant-vps-template.md).
+
 #### MCPs de banco (Postgres + Redis) — opcional, por projeto
 
 O agente pode consultar Postgres e Redis direto. **Não vêm por padrão** (nem todo projeto usa banco) — adicione

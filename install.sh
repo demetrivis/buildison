@@ -178,20 +178,50 @@ ASSUME_YES=0
 FORCE=0
 SETUP_INFRA=""    # "" = perguntar; 1 = sim; 0 = não
 SETUP_SERENA=""   # idem
+MEMORY_MODE=""    # "" = perguntar (ou ler config per-máquina); "local" | "vps"
+QDRANT_URL_OPT="" # URL custom (modo vps); default lê de ~/.buildison/vps.env ou pergunta
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dir)       TARGET_DIR="${2:-}"; shift 2;;
-    --agents)    AGENTS_CSV="${2:-}"; shift 2;;
-    --infra)     SETUP_INFRA=1; shift;;
-    --no-infra)  SETUP_INFRA=0; shift;;
-    --serena)    SETUP_SERENA=1; shift;;
-    --no-serena) SETUP_SERENA=0; shift;;
-    --yes|-y)    ASSUME_YES=1; shift;;
-    --force)     FORCE=1; shift;;
-    -h|--help)   sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --dir)         TARGET_DIR="${2:-}"; shift 2;;
+    --agents)      AGENTS_CSV="${2:-}"; shift 2;;
+    --infra)       SETUP_INFRA=1; shift;;
+    --no-infra)    SETUP_INFRA=0; shift;;
+    --serena)      SETUP_SERENA=1; shift;;
+    --no-serena)   SETUP_SERENA=0; shift;;
+    --memory)      MEMORY_MODE="${2:-}"; shift 2;;
+    --memory=*)    MEMORY_MODE="${1#*=}"; shift;;
+    --qdrant-url)  QDRANT_URL_OPT="${2:-}"; shift 2;;
+    --qdrant-url=*) QDRANT_URL_OPT="${1#*=}"; shift;;
+    --yes|-y)      ASSUME_YES=1; shift;;
+    --force)       FORCE=1; shift;;
+    -h|--help)     sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "Argumento desconhecido: $1 (use --help)";;
   esac
 done
+case "$MEMORY_MODE" in ""|local|vps) ;; *) die "--memory deve ser 'local' ou 'vps' (recebido: $MEMORY_MODE)";; esac
+
+# config per-máquina (~/.buildison/vps.env): escolha uma vez, vale pra todos os projetos
+BLD_CFG_DIR="$HOME/.buildison"
+BLD_CFG="$BLD_CFG_DIR/vps.env"
+load_machine_cfg() {
+  if [ -f "$BLD_CFG" ]; then
+    # shellcheck disable=SC1090
+    . "$BLD_CFG"
+    [ -z "$MEMORY_MODE"    ] && [ -n "${BUILDISON_MEMORY_MODE:-}" ] && MEMORY_MODE="$BUILDISON_MEMORY_MODE"
+    [ -z "$QDRANT_URL_OPT" ] && [ -n "${BUILDISON_QDRANT_URL:-}"  ] && QDRANT_URL_OPT="$BUILDISON_QDRANT_URL"
+  fi
+}
+save_machine_cfg() {
+  mkdir -p "$BLD_CFG_DIR"
+  cat > "$BLD_CFG" <<EOF
+# Config per-máquina do buildison — escolha uma vez, vale pra novos projetos desta máquina.
+# (Apague esse arquivo pra ser perguntado de novo.)
+BUILDISON_MEMORY_MODE=$MEMORY_MODE
+BUILDISON_QDRANT_URL=${QDRANT_URL_OPT}
+EOF
+  ok "Config per-máquina salva em $BLD_CFG"
+}
+load_machine_cfg
 
 # ---------- localizar a fonte (repo clonado ou clonar em temp p/ curl|bash) ----------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd || true)"
@@ -259,11 +289,41 @@ if [ -z "$SETUP_SERENA" ]; then
   fi
 fi
 
+# ---------- modo de memória (local vs VPS) — escolha per-máquina, salva em ~/.buildison/vps.env ----------
+if [ -z "$MEMORY_MODE" ]; then
+  if [ "$ASSUME_YES" -eq 1 ]; then MEMORY_MODE="local"; else
+    echo ""
+    printf "${c_bold}Onde fica a memória (Qdrant) deste e dos próximos projetos desta máquina?${c_reset}\n"
+    printf "  1) Local — http://localhost:6333 (do ~/local-infra). Simples; memória só nesta máquina.\n"
+    printf "  2) VPS   — HTTPS público com api-key. Memória segue você entre máquinas.\n"
+    printf "  (essa escolha é salva em ~/.buildison/vps.env e vale pra novos projetos.\n"
+    printf "   Veja docs/infra/qdrant-vps-template.md no buildison pra montar a VPS.)\n"
+    printf "Escolha [1]: "; prompt_read mm
+    case "$mm" in 2) MEMORY_MODE="vps";; *) MEMORY_MODE="local";; esac
+  fi
+fi
+if [ "$MEMORY_MODE" = "vps" ] && [ -z "$QDRANT_URL_OPT" ]; then
+  if [ "$ASSUME_YES" -eq 1 ]; then
+    die "--memory=vps requer --qdrant-url=<URL> em modo --yes."
+  fi
+  printf "URL do Qdrant na VPS (ex: https://qdrant.seu-dominio.com): "; prompt_read qurl
+  [ -z "$qurl" ] && die "URL vazia. Aborte ou rode de novo informando --qdrant-url."
+  QDRANT_URL_OPT="$qurl"
+fi
+[ "$MEMORY_MODE" = "vps" ] && save_machine_cfg
+[ "$MEMORY_MODE" = "local" ] && [ -f "$BLD_CFG" ] && save_machine_cfg
+
 # nome da collection do Qdrant derivado do projeto
 PROJ_NAME="$(basename "$TARGET_DIR" | tr '[:upper:] -' '[:lower:]__' | tr -cd 'a-z0-9_')"
 COLLECTION="agent_${PROJ_NAME:-project_main}"
 EMBED="sentence-transformers/all-MiniLM-L6-v2"
-info "Collection Qdrant: ${COLLECTION}"
+if [ "$MEMORY_MODE" = "vps" ]; then
+  QDRANT_URL="$QDRANT_URL_OPT"
+  info "Memória: VPS ($QDRANT_URL) · collection ${COLLECTION}"
+else
+  QDRANT_URL="http://localhost:6333"
+  info "Memória: local (${QDRANT_URL}) · collection ${COLLECTION}"
+fi
 
 # ---------- copiar core compartilhado (não sobrescreve context.md/decisions.md) ----------
 copy_keep() { # src dst  (não sobrescreve se já existe, salvo --force)
@@ -324,6 +384,11 @@ Mapeamento (use a coluna da direita):
 > `claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"`.
 EOF
   ok "CLAUDE.md"
+  if [ "$MEMORY_MODE" = "vps" ]; then
+    QDRANT_ENV_JSON="{ \"QDRANT_URL\": \"${QDRANT_URL}\", \"QDRANT_API_KEY\": \"\${QDRANT_API_KEY}\", \"COLLECTION_NAME\": \"${COLLECTION}\", \"EMBEDDING_MODEL\": \"${EMBED}\" }"
+  else
+    QDRANT_ENV_JSON="{ \"QDRANT_URL\": \"${QDRANT_URL}\", \"COLLECTION_NAME\": \"${COLLECTION}\", \"EMBEDDING_MODEL\": \"${EMBED}\" }"
+  fi
   cat > "$TARGET_DIR/.mcp.json" <<EOF
 {
   "mcpServers": {
@@ -332,7 +397,7 @@ EOF
     "qdrant-memory": {
       "command": "uvx",
       "args": ["mcp-server-qdrant"],
-      "env": { "QDRANT_URL": "http://localhost:6333", "COLLECTION_NAME": "${COLLECTION}", "EMBEDDING_MODEL": "${EMBED}" }
+      "env": ${QDRANT_ENV_JSON}
     }
   }
 }
@@ -365,7 +430,11 @@ if [ "$SEL_CODEX" -eq 1 ]; then
       echo "[mcp_servers.qdrant-memory]"
       echo 'command = "uvx"'
       echo 'args = ["mcp-server-qdrant"]'
-      echo "env = { QDRANT_URL = \"http://localhost:6333\", COLLECTION_NAME = \"${COLLECTION}\", EMBEDDING_MODEL = \"${EMBED}\" }"
+      if [ "$MEMORY_MODE" = "vps" ]; then
+        echo "env = { QDRANT_URL = \"${QDRANT_URL}\", QDRANT_API_KEY = \"\${QDRANT_API_KEY}\", COLLECTION_NAME = \"${COLLECTION}\", EMBEDDING_MODEL = \"${EMBED}\" }"
+      else
+        echo "env = { QDRANT_URL = \"${QDRANT_URL}\", COLLECTION_NAME = \"${COLLECTION}\", EMBEDDING_MODEL = \"${EMBED}\" }"
+      fi
       echo "$MARK_END"
     } >> "$CODEX_CFG"
     ok "Codex: MCP adicionado em ~/.codex/config.toml"
@@ -377,6 +446,11 @@ fi
 if [ "$SEL_OPENCODE" -eq 1 ]; then
   info "Configurando OpenCode/Hermes..."
   OC_CFG="$TARGET_DIR/opencode.json"
+  if [ "$MEMORY_MODE" = "vps" ]; then
+    OC_QENV="{ \"QDRANT_URL\": \"${QDRANT_URL}\", \"QDRANT_API_KEY\": \"\${QDRANT_API_KEY}\", \"COLLECTION_NAME\": \"${COLLECTION}\", \"EMBEDDING_MODEL\": \"${EMBED}\" }"
+  else
+    OC_QENV="{ \"QDRANT_URL\": \"${QDRANT_URL}\", \"COLLECTION_NAME\": \"${COLLECTION}\", \"EMBEDDING_MODEL\": \"${EMBED}\" }"
+  fi
   read -r -d '' OC_JSON <<EOF || true
 {
   "\$schema": "https://opencode.ai/config.json",
@@ -386,7 +460,7 @@ if [ "$SEL_OPENCODE" -eq 1 ]; then
     "qdrant-memory": {
       "type": "local",
       "command": ["uvx", "mcp-server-qdrant"],
-      "environment": { "QDRANT_URL": "http://localhost:6333", "COLLECTION_NAME": "${COLLECTION}", "EMBEDDING_MODEL": "${EMBED}" },
+      "environment": ${OC_QENV},
       "enabled": true
     }
   }
@@ -417,12 +491,26 @@ if [ -n "$INFRA_PGPASS" ]; then
   echo "  (salva em ~/local-infra/.env · connection: postgresql://dev:${INFRA_PGPASS}@localhost:5432/<db>)"
 fi
 
+if [ "$MEMORY_MODE" = "vps" ]; then
+  echo ""
+  printf "${c_bold}Memória: VPS (${QDRANT_URL})${c_reset}\n"
+  echo "  O .mcp.json gerado usa \${QDRANT_API_KEY} (expandida do AMBIENTE do shell que abre o claude)."
+  echo "  Antes de rodar o claude, exporte a key UMA vez:"
+  echo "    export QDRANT_API_KEY=<sua-api-key>      # por sessão"
+  echo "    echo 'export QDRANT_API_KEY=...' >> ~/.zshrc   # persistente"
+  echo "  Doc: docs/infra/qdrant-vps-template.md (no buildison)"
+fi
+
 echo ""
 printf "${c_bold}Próximos passos:${c_reset}\n"
-if [ "$SETUP_INFRA" = "1" ]; then
-  echo "  1. Subir a infra:  cd ~/local-infra && docker compose up -d"
+if [ "$MEMORY_MODE" = "local" ]; then
+  if [ "$SETUP_INFRA" = "1" ]; then
+    echo "  1. Subir a infra:  cd ~/local-infra && docker compose up -d"
+  else
+    echo "  1. Infra (se ainda não tem):  rode de novo com --infra, ou suba seu ~/local-infra"
+  fi
 else
-  echo "  1. Infra (se ainda não tem):  rode de novo com --infra, ou suba seu ~/local-infra"
+  echo "  1. Garanta que a VPS Qdrant está no ar (https) e que QDRANT_API_KEY está exportada"
 fi
 [ "$SETUP_SERENA" = "1" ] || echo "  2. Serena (se for usar):  uv tool install -p 3.13 serena-agent && serena init"
 [ "$SEL_CLAUDE" -eq 1 ]   && echo "  3. Claude:   abra o projeto e rode /mcp para aprovar os servidores"

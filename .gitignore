@@ -4,6 +4,13 @@
 # Worktrees de agente (transitórias)
 .claude/worktrees/
 
+# Docs de infra pessoais (têm IPs/domínios/keys) — só o *-template.md vai pro repo
+docs/infra/qdrant-vps-setup.md
+docs/infra/REMOTE-*.md
+
+# Config per-máquina do buildison (URLs/escolhas locais)
+.buildison/
+
 # Artefatos de empacotamento npm
 *.tgz
 

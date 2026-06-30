@@ -36,11 +36,17 @@ As credenciais abaixo são **exemplos de dev local** (o stack nunca é exposto a
 - `localhost:6379` (host) / `host.docker.internal:6379` (container) · sem auth
 - Connection string: `redis://localhost:6379/0` — um número de DB por projeto (`/0`, `/1`, ...)
 
-### Qdrant
+### Qdrant (memória dos agentes — dois modos)
 
-- REST `localhost:6333` · gRPC `6334` · sem auth · dashboard em `http://localhost:6333/dashboard`
-- Memória vetorial dos agentes — 1 Qdrant, **uma collection por projeto**
-- Acesso via MCP `qdrant-memory`; convenções na skill `agent-memory`
+Dois modos, escolha **uma vez por máquina** no instalador (`--memory=local|vps`,
+salvo em `~/.buildison/vps.env`):
+
+- **Local** (default): REST `http://localhost:6333` · gRPC `6334` · sem auth · dashboard em `http://localhost:6333/dashboard`. Simples; memória só nesta máquina.
+- **VPS**: `https://qdrant.<seu-dominio>` com header `api-key`. Memória **segue você entre máquinas**. Setup em `docs/infra/qdrant-vps-template.md`.
+
+Em ambos: 1 instância Qdrant, **uma collection por projeto** (ex.: `agent_<projeto>`).
+Acesso via MCP `qdrant-memory`; convenções na skill `agent-memory`. Sem replicação automática
+entre local e VPS — escolha uma como fonte de verdade.
 
 ### Tunnels (ngrok + cloudflared)
 
