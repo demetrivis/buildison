@@ -42,8 +42,10 @@ function New-RandomPassword {
 }
 
 # ---------- localizar a fonte (repo clonado, ou clonar em temp p/ irm|iex) ----------
+# Marcadores ÚNICOS do repo fonte (install.sh + bin/buildison.mjs) — não usar AGENTS.md/.claude,
+# que todo projeto instalado tem.
 $src = $PSScriptRoot
-if (-not $src -or -not (Test-Path (Join-Path $src 'AGENTS.md')) -or -not (Test-Path (Join-Path $src '.claude'))) {
+if (-not $src -or -not (Test-Path (Join-Path $src 'install.sh')) -or -not (Test-Path (Join-Path $src 'bin\buildison.mjs'))) {
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Die 'git é necessário para baixar o buildison.' }
   $src = Join-Path $env:TEMP ('buildison-' + [guid]::NewGuid().ToString('N'))
   Info "Baixando buildison para $src ..."

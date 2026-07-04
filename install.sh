@@ -224,9 +224,12 @@ EOF
 load_machine_cfg
 
 # ---------- localizar a fonte (repo clonado ou clonar em temp p/ curl|bash) ----------
+# Marcadores ÚNICOS do repo fonte (install.sh + bin/buildison.mjs) — NÃO usar AGENTS.md/.claude
+# porque todo projeto que já usou o buildison tem esses, o que faria o script confundir a pasta
+# atual (via curl|bash, $0 vira a CWD) com o próprio repo.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd || true)"
 SRC_DIR=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/AGENTS.md" ] && [ -d "$SCRIPT_DIR/.claude" ]; then
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/install.sh" ] && [ -f "$SCRIPT_DIR/bin/buildison.mjs" ]; then
   SRC_DIR="$SCRIPT_DIR"
 else
   command -v git >/dev/null 2>&1 || die "git é necessário para baixar o buildison."
