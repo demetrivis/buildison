@@ -13,6 +13,12 @@ Use this agent for HTTP-layer work: creating and reviewing endpoints/routes/cont
 
 _Instruções completas do papel: `.claude/agents/api.md` (markdown legível)._
 
+## arq-info-web
+
+Engenharia reversa da ARQUITETURA DE INFORMAÇÃO de um app web EXTERNO rodando no navegador (ex.: um CRM de terceiro) — dirige as ferramentas de browser/devtools em modo READ-ONLY sobre o alvo, captura navegação, telas, rótulos e as requisições de rede, e ESCREVE uma pasta de artefatos (sitemap, ERD/MDM, catálogo de API, fluxos, componentes de UI, gaps). Use para mapear um sistema de terceiro e reconstruí-lo com a mesma experiência. É o par do `arq-info` (que documenta o nosso próprio código), mirando um alvo web em vez do repositório.
+
+_Instruções completas do papel: `.claude/agents/arq-info-web.md` (markdown legível)._
+
 ## arq-info
 
 Use this agent to document a project's architecture in READ-ONLY mode: it reads the codebase and PROPOSES four artifacts — a C4 model in Structurizr DSL, a deployment view, a data model/ERD with MDM analysis, and an ADR — delivered as versionable text in its response, never written to the repo. Invoke when the user asks to map/document the architecture, produce C4/Structurizr/deployment diagrams, model entities/MDM, or generate an architecture decision record. Runs the plano-operacao skill's 5-phase pipeline.
@@ -24,6 +30,12 @@ _Instruções completas do papel: `.claude/agents/arq-info.md` (markdown legíve
 Use this agent for database work on Supabase + PostgreSQL: schema/table design, SQL migrations, RLS policies, repositories, and Supabase client CRUD. Invoke when creating tables, writing migrations, configuring Row Level Security, building repository classes, or tuning indexes and query performance. Does not handle HTTP routing, domain logic, infra, or logging config.
 
 _Instruções completas do papel: `.claude/agents/db.md` (markdown legível)._
+
+## design-system-extractor
+
+Use this agent to reverse-engineer a living design system from a reference website's HTML. It emits ONE self-contained design-system.html (in the same folder as the input) that REUSES the exact class names, CSS, animations, timing, easing and layout of the original — never redesigning or inventing styles — documented as sections: an exact Hero clone, typography spec, colors/surfaces, UI components with states, layout/spacing, motion gallery and icons. Use when you have a reference page and want a faithful, self-documenting pattern library. It is the visual counterpart of arq-info-web (which reverse-engineers information architecture).
+
+_Instruções completas do papel: `.claude/agents/design-system-extractor.md` (markdown legível)._
 
 ## golang
 

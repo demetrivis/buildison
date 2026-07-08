@@ -48,7 +48,7 @@ CLAUDE.md              # bridge Claude Code → @AGENTS.md + @docs/agent/context
 .mcp.json              # toolbox MCP (spec-workflow, serena, qdrant-memory)
 .spec-workflow/        # templates de requirements/design/tasks
 .claude/               # PERMANENTE: máquina do boilerplate
-├── agents/         # db, api, logic, infra, logger, security-auditor, golang, prisma, nestjs, postgrest, arq-info, suporte
+├── agents/         # db, api, logic, infra, logger, security-auditor, golang, prisma, nestjs, postgrest, arq-info, arq-info-web, design-system-extractor, suporte
 ├── commands/       # /commit, /push, /pr, /docker, /team, ...
 └── skills/         # database, api, infra, logging, local-infra, agent-memory, spec-workflow, golang, nestjs, prisma, postgrest, plano-operacao, ...
 .agents/               # espelho p/ Antigravity (roster + skills), gerado de .claude/ por scripts/gen-antigravity.mjs

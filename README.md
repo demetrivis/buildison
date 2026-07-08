@@ -250,12 +250,12 @@ AGENTS.md             # contrato fixo do repo para agentes
 .claude/
 ├── settings.json
 ├── agents/
-│   ├── db.md
-│   ├── api.md
-│   ├── logic.md
-│   ├── infra.md
-│   ├── logger.md
-│   └── security-auditor.md
+│   ├── db.md · api.md · logic.md · infra.md · logger.md
+│   ├── golang.md · nestjs.md · prisma.md · postgrest.md
+│   ├── security-auditor.md · suporte.md
+│   ├── arq-info.md            # doc de arquitetura do nosso código (read-only)
+│   ├── arq-info-web.md        # reverse-eng de IA de app web externo (browser, read-only)
+│   └── design-system-extractor.md  # extrai design system de um site de referência
 ├── commands/
 │   ├── commit.md
 │   ├── push.md
