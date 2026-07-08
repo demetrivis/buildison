@@ -58,10 +58,14 @@ O instalador é **idempotente**: não sobrescreve `docs/agent/context.md` (seu c
 duplica o bloco MCP do Codex. Use `--force` para regravar os arquivos gerados.
 
 > **Antigravity** lê o `AGENTS.md` da raiz nativamente (mesmo padrão do Codex/OpenCode). O `.agents/`
-> (roster de agentes + skills) é **espelhado de `.claude/`** por `scripts/gen-antigravity.mjs` — rode-o pra
-> ressincronizar. O MCP dele é **global** (`~/.gemini/…/mcp_config.json`, não por-projeto): o installer/switch
-> gravam as 3 chaves (`spec-workflow`/`serena`/`qdrant-memory`) com o **caminho absoluto do projeto atual** e a
-> collection dele — reflete o último projeto instalado/trocado. Confira em _Settings › Customizations › Open MCP Config_.
+> (roster de agentes + skills + workflows) é **espelhado de `.claude/`** por `scripts/gen-antigravity.mjs` — rode-o
+> pra ressincronizar. Os **workflows** viram slash-commands: `/commit`, `/pr`, `/push`, `/tlg`… (nome do arquivo =
+> comando). O MCP dele é **global** (`~/.gemini/…/mcp_config.json`, não por-projeto): o installer/switch gravam as
+> 3 chaves (`spec-workflow`/`serena`/`qdrant-memory`) com o **caminho absoluto do projeto atual** e a collection
+> dele — reflete o último projeto instalado/trocado. Confira em _Settings › Customizations › Open MCP Config_.
+>
+> _Pasta dos workflows:_ o codelab oficial do Google usa `.agents/workflows/` (o que geramos); se na sua versão os
+> slash-commands não aparecerem, renomeie pra `.agent/workflows/` (singular — citada por fontes de terceiros).
 
 #### Pré-requisitos da máquina (opt-in, uma vez por máquina)
 
@@ -275,8 +279,9 @@ AGENTS.md             # contrato fixo do repo para agentes
     ├── seo-technical/
     └── favicon/
 .agents/              # espelho p/ Antigravity (gerado de .claude/ por scripts/gen-antigravity.mjs)
-├── agents.md         # roster dos agentes
-└── skills/           # uma skill por arquivo
+├── agents.md         # roster dos agentes (de .claude/agents/)
+├── skills/           # uma skill por arquivo (de .claude/skills/)
+└── workflows/        # um slash-command por arquivo (de .claude/commands/) — ex.: /commit, /pr
 scripts/
 └── gen-antigravity.mjs   # regenera .agents/ a partir de .claude/
 

@@ -6,8 +6,9 @@
 // Uso:  node scripts/gen-antigravity.mjs        (roda a partir da raiz do repo)
 //
 // Saída (sobrescrita — NÃO edite à mão, rode de novo pra ressincronizar):
-//   .agents/agents.md          — roster dos agentes (name + description do frontmatter)
-//   .agents/skills/<nome>.md   — uma skill por arquivo (frontmatter + corpo do SKILL.md)
+//   .agents/agents.md            — roster dos agentes (name + description do frontmatter)
+//   .agents/skills/<nome>.md     — uma skill por arquivo (frontmatter + corpo do SKILL.md)
+//   .agents/workflows/<nome>.md  — um slash-command por arquivo (de .claude/commands/)
 //
 // Fonte de verdade continua em .claude/. Este é um espelho de descoberta/leitura.
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, statSync } from 'node:fs';
@@ -17,8 +18,10 @@ import { dirname, join } from 'node:path';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const claudeAgents = join(repoRoot, '.claude', 'agents');
 const claudeSkills = join(repoRoot, '.claude', 'skills');
+const claudeCommands = join(repoRoot, '.claude', 'commands');
 const outDir = join(repoRoot, '.agents');
 const outSkills = join(outDir, 'skills');
+const outWorkflows = join(outDir, 'workflows');
 
 // Extrai o bloco de frontmatter YAML (--- ... ---) e o corpo. Parser tolerante:
 // só precisamos de name/description (linhas simples, valor com ou sem aspas).
@@ -107,6 +110,44 @@ function buildSkills() {
   return n;
 }
 
+// ---------- commands -> .agents/workflows/<nome>.md ----------
+// O Antigravity mapeia /<arquivo> -> .agents/workflows/<arquivo>.md (frontmatter só exige description).
+// (Algumas fontes citam .agent/workflows/ no singular — se os slash-commands não aparecerem na sua
+//  versão, renomeie a pasta pra .agent/workflows/. O codelab oficial do Google usa .agents/.)
+function buildWorkflows() {
+  const files = readdirSync(claudeCommands).filter((f) => f.endsWith('.md')).sort();
+  let n = 0;
+  for (const f of files) {
+    const raw = readFileSync(join(claudeCommands, f), 'utf8');
+    const lines = raw.split('\n');
+    const head = lines.find((l) => l.trim().startsWith('#'));
+    // description: o texto após o "—" do título "# /cmd — Descrição"; senão o nome do comando
+    let desc = f.replace(/\.md$/, '');
+    if (head) {
+      let t = head.replace(/^#+\s*/, '').trim();
+      const dash = t.indexOf('—');
+      t = dash !== -1 ? t.slice(dash + 1).trim() : t.replace(/^\/\S+\s*/, '').trim();
+      if (t) desc = t;
+    }
+    desc = desc.slice(0, 250);
+    // corpo: tudo depois da primeira linha de título (frontmatter carrega a description)
+    let body = raw;
+    if (head) { const i = raw.indexOf(head); body = raw.slice(i + head.length).replace(/^\s*\n/, ''); }
+    const out = [
+      '---',
+      `description: ${JSON.stringify(desc)}`,
+      '---',
+      '',
+      `<!-- Gerado de .claude/commands/${f} por scripts/gen-antigravity.mjs — não edite à mão. -->`,
+      '',
+      body.trimEnd(),
+    ];
+    writeFileSync(join(outWorkflows, f), out.join('\n').trimEnd() + '\n');
+    n++;
+  }
+  return n;
+}
+
 // ---------- run ----------
 if (!existsSync(claudeAgents) || !existsSync(claudeSkills)) {
   process.stderr.write('x .claude/agents ou .claude/skills não encontrado — rode a partir da raiz do repo buildison.\n');
@@ -114,6 +155,8 @@ if (!existsSync(claudeAgents) || !existsSync(claudeSkills)) {
 }
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outSkills, { recursive: true });
+mkdirSync(outWorkflows, { recursive: true });
 const na = buildAgents();
 const ns = buildSkills();
-process.stdout.write(`OK .agents/ gerado: ${na} agentes em agents.md, ${ns} skills em skills/\n`);
+const nw = existsSync(claudeCommands) ? buildWorkflows() : 0;
+process.stdout.write(`OK .agents/ gerado: ${na} agentes em agents.md, ${ns} skills em skills/, ${nw} workflows em workflows/\n`);
