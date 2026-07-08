@@ -2,8 +2,10 @@
 <#
 buildison switch (Windows / PowerShell) — troca o modo de memória (local | vps) do projeto atual.
 
-Atualiza .mcp.json (Claude Code), opencode.json (OpenCode) e o bloco Codex em
-~/.codex/config.toml. NÃO toca em .claude/, AGENTS.md, CLAUDE.md, docs/agent/ nem skills.
+Atualiza .mcp.json (Claude Code), opencode.json (OpenCode), o bloco Codex em
+~/.codex/config.toml e o config global do Antigravity (~/.gemini/.../mcp_config.json).
+NÃO toca em .claude/, .agents/, AGENTS.md, CLAUDE.md, docs/agent/ nem skills.
+Só atualiza um agente se ele JÁ estiver configurado (não instala).
 
 Uso:
   .\switch.ps1                                              # interativo (no diretório atual)
@@ -182,6 +184,35 @@ if ((Test-Path $codex) -and (Select-String -SimpleMatch -Quiet -Path $codex -Pat
   }, [Text.RegularExpressions.RegexOptions]::Singleline)
   Set-Content -Path $codex -Value $new -Encoding UTF8
   Ok "Codex (bloco $projName) atualizado"
+}
+
+# ----- Antigravity (config global ~/.gemini/.../mcp_config.json) -----
+# So atualiza se JA houver as chaves do buildison (nao instala aqui). Re-aponta as 3 chaves
+# pra ESTE projeto (caminho absoluto + collection) e aplica o modo.
+$agCands = @(
+  (Join-Path $env:USERPROFILE '.gemini\antigravity\mcp_config.json'),
+  (Join-Path $env:USERPROFILE '.gemini\config\mcp_config.json')
+)
+$agCfg = $agCands | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($agCfg) {
+  $agObj = Get-Content $agCfg -Raw | ConvertFrom-Json
+  if ($agObj.mcpServers -and $agObj.mcpServers.'qdrant-memory') {
+    Backup $agCfg
+    $agEnv = [ordered]@{ QDRANT_URL = $qUrl }
+    if ($Memory -eq 'vps') { $agEnv['QDRANT_API_KEY'] = '${QDRANT_API_KEY}' }
+    $agEnv['COLLECTION_NAME'] = $collection
+    $agEnv['EMBEDDING_MODEL'] = $Embed
+    $agServers = [ordered]@{
+      'spec-workflow' = [ordered]@{ command = 'npx';    args = @('-y', '@pimzino/spec-workflow-mcp@latest', $target) }
+      'serena'        = [ordered]@{ command = 'serena'; args = @('start-mcp-server', '--context', 'ide-assistant', '--project', $target) }
+      'qdrant-memory' = [ordered]@{ command = 'uvx';    args = @('mcp-server-qdrant'); env = $agEnv }
+    }
+    foreach ($k in $agServers.Keys) {
+      $agObj.mcpServers | Add-Member -NotePropertyName $k -NotePropertyValue ([pscustomobject]$agServers[$k]) -Force
+    }
+    $agObj | ConvertTo-Json -Depth 16 | Set-Content -Path $agCfg -Encoding UTF8
+    Ok "Antigravity ($agCfg) atualizado"
+  }
 }
 
 # ----- resumo -----

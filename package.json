@@ -1,7 +1,7 @@
 {
   "name": "buildison",
   "version": "0.7.1",
-  "description": "Toolbox de agentes de código (AGENTS.md + MCP) — instalador multi-agente: Claude Code, Codex, OpenCode/Hermes",
+  "description": "Toolbox de agentes de código (AGENTS.md + MCP) — instalador multi-agente: Claude Code, Codex, OpenCode/Hermes, Antigravity",
   "bin": {
     "buildison": "bin/buildison.mjs"
   },
@@ -16,6 +16,8 @@
     "docs/infra/*-template.md",
     "CLAUDE.md",
     ".claude/",
+    ".agents/",
+    "scripts/gen-antigravity.mjs",
     "docs/agent/",
     ".spec-workflow/templates/"
   ],
@@ -29,6 +31,7 @@
     "claude-code",
     "codex",
     "opencode",
+    "antigravity",
     "agents",
     "mcp",
     "agents.md",

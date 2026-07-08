@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
 # buildison switch — troca o modo de memória (local | vps) do projeto atual,
-# atualizando .mcp.json (Claude Code), opencode.json (OpenCode) e o bloco
-# Codex em ~/.codex/config.toml. NÃO toca em .claude/, AGENTS.md, CLAUDE.md,
-# docs/agent/* nem skills — só nos configs de MCP do projeto.
+# atualizando .mcp.json (Claude Code), opencode.json (OpenCode), o bloco Codex em
+# ~/.codex/config.toml e o config global do Antigravity (~/.gemini/.../mcp_config.json).
+# NÃO toca em .claude/, .agents/, AGENTS.md, CLAUDE.md, docs/agent/* nem skills —
+# só nos configs de MCP. Só atualiza um agente se ele JÁ estiver configurado (não instala).
 #
 # Uso:
 #   npx buildison switch                           # interativo
@@ -166,6 +167,34 @@ new_block = repl_section(block)
 open(path, "w").write(txt.replace(block, new_block))
 PY
   ok "Codex (bloco $PROJ_NAME) atualizado"
+fi
+
+# ----- Antigravity (config global ~/.gemini/.../mcp_config.json) -----
+# Só atualiza se JÁ houver as chaves do buildison (não instala aqui). Config global e sem CWD:
+# re-aponta as 3 chaves pra ESTE projeto (caminho absoluto + collection) e aplica o modo.
+AG_CFG=""
+for c in "$HOME/.gemini/config/mcp_config.json" "$HOME/.gemini/antigravity/mcp_config.json"; do
+  [ -f "$c" ] && { AG_CFG="$c"; break; }
+done
+if [ -n "$AG_CFG" ] && python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,dict) and 'qdrant-memory' in d.get('mcpServers',{}) else 1)" "$AG_CFG" 2>/dev/null; then
+  cp "$AG_CFG" "$AG_CFG.bak.$(date +%s 2>/dev/null || echo bak)" 2>/dev/null || true
+  python3 - "$AG_CFG" "$TARGET_DIR" "$QDRANT_URL" "$COLLECTION" "$EMBED" "$MEMORY_MODE" <<'PY'
+import json, sys
+path, proj, qurl, coll, embed, mode = sys.argv[1:7]
+d = json.load(open(path))
+servers = d.setdefault("mcpServers", {})
+env = {"QDRANT_URL": qurl}
+if mode == "vps":
+    env["QDRANT_API_KEY"] = "${QDRANT_API_KEY}"
+env["COLLECTION_NAME"] = coll
+env["EMBEDDING_MODEL"] = embed
+servers["spec-workflow"] = {"command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", proj]}
+servers["serena"] = {"command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", proj]}
+servers["qdrant-memory"] = {"command": "uvx", "args": ["mcp-server-qdrant"], "env": env}
+with open(path, "w") as f:
+    json.dump(d, f, indent=2); f.write("\n")
+PY
+  ok "Antigravity ($AG_CFG) atualizado"
 fi
 
 echo ""

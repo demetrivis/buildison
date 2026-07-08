@@ -5,11 +5,11 @@
 # Uso:
 #   ./install.sh                          # interativo, instala no diretório atual
 #   ./install.sh --dir ~/code/meu-projeto # escolhe o destino
-#   ./install.sh --agents claude,codex,opencode --yes
+#   ./install.sh --agents claude,codex,opencode,antigravity --yes
 #   ./install.sh --infra                  # também monta o local-infra (stack global)
 #   curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
 #
-# Agentes suportados: claude, codex, opencode
+# Agentes suportados: claude, codex, opencode, antigravity
 # Flags: --dir <path> --agents <lista> --infra/--no-infra --yes --force
 #
 set -euo pipefail
@@ -253,23 +253,25 @@ TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd || die "Diretório inválido: 
 ok "Destino: $TARGET_DIR"
 
 # ---------- seleção de agentes ----------
-SEL_CLAUDE=0; SEL_CODEX=0; SEL_OPENCODE=0
+SEL_CLAUDE=0; SEL_CODEX=0; SEL_OPENCODE=0; SEL_ANTIGRAVITY=0
 if [ -z "$AGENTS_CSV" ] && [ "$ASSUME_YES" -eq 0 ]; then
   echo ""
   printf "${c_bold}Quais agentes configurar?${c_reset}\n"
-  printf "  1) Claude Code\n  2) Codex\n  3) OpenCode/Hermes\n  4) Todos\n"
-  printf "Escolha (ex: 1,2 ou 4): "; prompt_read sel
-  case ",${sel}," in *4*) AGENTS_CSV="claude,codex,opencode";; esac
+  printf "  1) Claude Code\n  2) Codex\n  3) OpenCode/Hermes\n  4) Antigravity (Google)\n  5) Todos\n"
+  printf "Escolha (ex: 1,2 ou 5): "; prompt_read sel
+  case ",${sel}," in *5*) AGENTS_CSV="claude,codex,opencode,antigravity";; esac
   [ -z "$AGENTS_CSV" ] && {
     case ",${sel}," in *,1,*) AGENTS_CSV="${AGENTS_CSV}claude,";; esac
     case ",${sel}," in *,2,*) AGENTS_CSV="${AGENTS_CSV}codex,";; esac
     case ",${sel}," in *,3,*) AGENTS_CSV="${AGENTS_CSV}opencode,";; esac
+    case ",${sel}," in *,4,*) AGENTS_CSV="${AGENTS_CSV}antigravity,";; esac
   }
 fi
 [ -z "$AGENTS_CSV" ] && AGENTS_CSV="claude"
 case ",$AGENTS_CSV," in *,claude,*|*claude*) SEL_CLAUDE=1;; esac
 case ",$AGENTS_CSV," in *codex*) SEL_CODEX=1;; esac
 case ",$AGENTS_CSV," in *opencode*) SEL_OPENCODE=1;; esac
+case ",$AGENTS_CSV," in *antigravity*) SEL_ANTIGRAVITY=1;; esac
 
 # ---------- pré-requisitos da máquina (uma vez por máquina, opt-in) ----------
 if [ -z "$SETUP_INFRA" ]; then
@@ -478,6 +480,52 @@ EOF
   ok "OpenCode: AGENTS.md (lido nativamente da raiz do projeto)"
 fi
 
+# ---------- Antigravity (Google) — AGENTS.md nativo + .agents/ + MCP global ----------
+# O Antigravity lê AGENTS.md da raiz (já copiado no core). Aqui espelhamos o roster/skills
+# em .agents/ e registramos a toolbox MCP no config GLOBAL do Antigravity (não é por-projeto):
+# ~/.gemini/config/mcp_config.json  (fallback ~/.gemini/antigravity/mcp_config.json).
+# Como é global e sem CWD confiável, usamos caminhos ABSOLUTOS do projeto e a collection deste projeto.
+if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
+  info "Configurando Antigravity..."
+  if [ -d "$SRC_DIR/.agents" ]; then
+    cp -Rf "$SRC_DIR/.agents" "$TARGET_DIR/.agents"; ok ".agents/ (roster + skills)"
+  else
+    warn ".agents/ não existe na fonte — rode 'node scripts/gen-antigravity.mjs' no repo buildison."
+  fi
+  # localiza o mcp_config.json: primeiro candidato existente vence, senão o default
+  AG_CFG=""
+  for c in "$HOME/.gemini/config/mcp_config.json" "$HOME/.gemini/antigravity/mcp_config.json"; do
+    [ -f "$c" ] && { AG_CFG="$c"; break; }
+  done
+  [ -z "$AG_CFG" ] && AG_CFG="$HOME/.gemini/config/mcp_config.json"
+  mkdir -p "$(dirname "$AG_CFG")"
+  [ -f "$AG_CFG" ] && cp "$AG_CFG" "$AG_CFG.bak.$(date +%s 2>/dev/null || echo bak)" 2>/dev/null || true
+  # merge: mexe SÓ nas 3 chaves do buildison, preserva o resto do config global
+  python3 - "$AG_CFG" "$TARGET_DIR" "$QDRANT_URL" "$COLLECTION" "$EMBED" "$MEMORY_MODE" <<'PY'
+import json, os, sys
+path, proj, qurl, coll, embed, mode = sys.argv[1:7]
+try:
+    d = json.load(open(path))
+    if not isinstance(d, dict): d = {}
+except Exception:
+    d = {}
+servers = d.setdefault("mcpServers", {})
+env = {"QDRANT_URL": qurl}
+if mode == "vps":
+    env["QDRANT_API_KEY"] = "${QDRANT_API_KEY}"
+env["COLLECTION_NAME"] = coll
+env["EMBEDDING_MODEL"] = embed
+servers["spec-workflow"] = {"command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", proj]}
+servers["serena"] = {"command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", proj]}
+servers["qdrant-memory"] = {"command": "uvx", "args": ["mcp-server-qdrant"], "env": env}
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w") as f:
+    json.dump(d, f, indent=2); f.write("\n")
+PY
+  ok "Antigravity: MCP em $AG_CFG (chaves spec-workflow/serena/qdrant-memory)"
+  ok "Antigravity: AGENTS.md (lido nativamente da raiz) + .agents/"
+fi
+
 # ---------- pré-requisitos da máquina (execução) ----------
 [ "$SETUP_INFRA" = "1" ]  && { echo ""; info "Montando local-infra..."; setup_local_infra; }
 [ "$SETUP_SERENA" = "1" ] && { echo ""; info "Configurando Serena..."; setup_serena; }
@@ -516,7 +564,8 @@ else
   echo "  1. Garanta que a VPS Qdrant está no ar (https) e que QDRANT_API_KEY está exportada"
 fi
 [ "$SETUP_SERENA" = "1" ] || echo "  2. Serena (se for usar):  uv tool install -p 3.13 serena-agent && serena init"
-[ "$SEL_CLAUDE" -eq 1 ]   && echo "  3. Claude:   abra o projeto e rode /mcp para aprovar os servidores"
-[ "$SEL_CODEX" -eq 1 ]    && echo "  3. Codex:    abra o projeto (lê AGENTS.md); MCP já está em ~/.codex/config.toml"
-[ "$SEL_OPENCODE" -eq 1 ] && echo "  3. OpenCode: abra o projeto (lê AGENTS.md + opencode.json)"
+[ "$SEL_CLAUDE" -eq 1 ]      && echo "  3. Claude:      abra o projeto e rode /mcp para aprovar os servidores"
+[ "$SEL_CODEX" -eq 1 ]       && echo "  3. Codex:       abra o projeto (lê AGENTS.md); MCP já está em ~/.codex/config.toml"
+[ "$SEL_OPENCODE" -eq 1 ]    && echo "  3. OpenCode:    abra o projeto (lê AGENTS.md + opencode.json)"
+[ "$SEL_ANTIGRAVITY" -eq 1 ] && echo "  3. Antigravity: abra o projeto (lê AGENTS.md + .agents/); MCP global em ~/.gemini (Settings › Customizations › Open MCP Config pra conferir)"
 echo "  4. Preencha docs/agent/context.md com o stack real do projeto."

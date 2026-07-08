@@ -4,9 +4,10 @@
 > evite editar aqui ao herdar o template. O que é específico do projeto (stack, comandos, arquitetura)
 > vive em [`docs/agent/context.md`](docs/agent/context.md), que o agente mantém.
 >
-> **Fonte única, lida por todos os agentes** — Claude Code, Codex, MiniMax, Hermes/OpenCode, Cursor:
+> **Fonte única, lida por todos os agentes** — Claude Code, Codex, MiniMax, Hermes/OpenCode, Cursor, Antigravity:
 > - **Claude Code** lê `CLAUDE.md`, que faz `@AGENTS.md` + `@docs/agent/context.md` no boot.
-> - **Demais agentes** leem `AGENTS.md` nativamente (e, por instrução abaixo, o `context.md`).
+> - **Demais agentes** leem `AGENTS.md` nativamente (e, por instrução abaixo, o `context.md`). O **Antigravity**
+>   também espelha o roster/skills em `.agents/` (gerado de `.claude/` por `scripts/gen-antigravity.mjs`).
 >
 > Em conflito de regra de comportamento, **este arquivo prevalece**.
 

@@ -4,9 +4,9 @@ buildison installer (Windows / PowerShell) — instala a toolbox de agentes (sin
 
 Uso:
   irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1 | iex      # interativo
-  .\install.ps1 -Dir . -Agents claude,codex,opencode -Infra -Serena                       # via clone, com flags
+  .\install.ps1 -Dir . -Agents claude,codex,opencode,antigravity -Infra -Serena          # via clone, com flags
 
-Agentes: claude, codex, opencode
+Agentes: claude, codex, opencode, antigravity
 Flags: -Dir <path> -Agents <lista> -Infra/-NoInfra -Serena/-NoSerena -Yes -Force
 #>
 [CmdletBinding()]
@@ -67,21 +67,23 @@ Ok "Destino: $Target"
 # ---------- seleção de agentes ----------
 if (-not $Agents -and -not $Yes) {
   Write-Host "Quais agentes configurar?" -ForegroundColor White
-  Write-Host "  1) Claude Code`n  2) Codex`n  3) OpenCode/Hermes`n  4) Todos"
-  $sel = Read-Host "Escolha (ex: 1,2 ou 4)"
-  if ($sel -match '4') { $Agents = 'claude,codex,opencode' }
+  Write-Host "  1) Claude Code`n  2) Codex`n  3) OpenCode/Hermes`n  4) Antigravity (Google)`n  5) Todos"
+  $sel = Read-Host "Escolha (ex: 1,2 ou 5)"
+  if ($sel -match '5') { $Agents = 'claude,codex,opencode,antigravity' }
   else {
     $a = @()
     if ($sel -match '1') { $a += 'claude' }
     if ($sel -match '2') { $a += 'codex' }
     if ($sel -match '3') { $a += 'opencode' }
+    if ($sel -match '4') { $a += 'antigravity' }
     $Agents = ($a -join ',')
   }
 }
 if (-not $Agents) { $Agents = 'claude' }
-$selClaude   = $Agents -match 'claude'
-$selCodex    = $Agents -match 'codex'
-$selOpencode = $Agents -match 'opencode'
+$selClaude      = $Agents -match 'claude'
+$selCodex       = $Agents -match 'codex'
+$selOpencode    = $Agents -match 'opencode'
+$selAntigravity = $Agents -match 'antigravity'
 
 # pré-requisitos da máquina (opt-in)
 $doInfra  = if ($Infra) { $true } elseif ($NoInfra) { $false } elseif ($Yes) { $false } else {
@@ -285,6 +287,50 @@ if ($selOpencode) {
   Ok "OpenCode: AGENTS.md (lido nativamente da raiz do projeto)"
 }
 
+# ---------- Antigravity (Google) — AGENTS.md nativo + .agents/ + MCP global ----------
+# Config GLOBAL (nao por-projeto): usa caminho ABSOLUTO do projeto + a collection deste projeto.
+# Windows: ~/.gemini/antigravity/mcp_config.json  (fallback ~/.gemini/config/mcp_config.json).
+if ($selAntigravity) {
+  Info "Configurando Antigravity..."
+  $agentsSrc = Join-Path $src '.agents'
+  if (Test-Path $agentsSrc) {
+    $agentsDst = Join-Path $Target '.agents'
+    New-Item -ItemType Directory -Force -Path $agentsDst | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $agentsSrc '*') $agentsDst
+    Ok ".agents\ (roster + skills)"
+  } else {
+    Warn ".agents\ nao existe na fonte — rode 'node scripts/gen-antigravity.mjs' no repo buildison."
+  }
+  # localiza o mcp_config.json: primeiro candidato existente vence, senao o default (Windows: antigravity\)
+  $agCands = @(
+    (Join-Path $env:USERPROFILE '.gemini\antigravity\mcp_config.json'),
+    (Join-Path $env:USERPROFILE '.gemini\config\mcp_config.json')
+  )
+  $agCfg = $agCands | Where-Object { Test-Path $_ } | Select-Object -First 1
+  if (-not $agCfg) { $agCfg = $agCands[0] }
+  New-Item -ItemType Directory -Force -Path (Split-Path $agCfg -Parent) | Out-Null
+  if (Test-Path $agCfg) {
+    $ts = [int][double]::Parse((Get-Date -UFormat %s)); Copy-Item $agCfg "$agCfg.bak.$ts" -Force
+    $agObj = Get-Content $agCfg -Raw | ConvertFrom-Json
+  } else { $agObj = [pscustomobject]@{} }
+  if (-not $agObj.mcpServers) { $agObj | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([pscustomobject]@{}) }
+  $agEnv = [ordered]@{ QDRANT_URL = $qUrl }
+  if ($Memory -eq 'vps') { $agEnv['QDRANT_API_KEY'] = '${QDRANT_API_KEY}' }
+  $agEnv['COLLECTION_NAME'] = $collection
+  $agEnv['EMBEDDING_MODEL'] = $Embed
+  $agServers = [ordered]@{
+    'spec-workflow' = [ordered]@{ command = 'npx';    args = @('-y', '@pimzino/spec-workflow-mcp@latest', $Target) }
+    'serena'        = [ordered]@{ command = 'serena'; args = @('start-mcp-server', '--context', 'ide-assistant', '--project', $Target) }
+    'qdrant-memory' = [ordered]@{ command = 'uvx';    args = @('mcp-server-qdrant'); env = $agEnv }
+  }
+  foreach ($k in $agServers.Keys) {
+    $agObj.mcpServers | Add-Member -NotePropertyName $k -NotePropertyValue ([pscustomobject]$agServers[$k]) -Force
+  }
+  $agObj | ConvertTo-Json -Depth 16 | Set-Content -Path $agCfg -Encoding UTF8
+  Ok "Antigravity: MCP em $agCfg (spec-workflow/serena/qdrant-memory)"
+  Ok "Antigravity: AGENTS.md (lido nativamente da raiz) + .agents\"
+}
+
 # ---------- local-infra (opt-in) ----------
 $infraPass = ""
 if ($doInfra) {
@@ -414,7 +460,8 @@ if ($Memory -eq 'local') {
   Write-Host "  1. Garanta que a VPS Qdrant esta no ar (HTTPS) e QDRANT_API_KEY exportada"
 }
 if (-not $doSerena) { Write-Host "  2. Serena (se for usar): uv tool install -p 3.13 serena-agent; serena init" }
-if ($selClaude)   { Write-Host "  3. Claude:   abra o projeto e rode /mcp pra aprovar os servidores" }
-if ($selCodex)    { Write-Host "  3. Codex:    abra o projeto (lê AGENTS.md); MCP em ~/.codex/config.toml" }
-if ($selOpencode) { Write-Host "  3. OpenCode: abra o projeto (lê AGENTS.md + opencode.json)" }
+if ($selClaude)      { Write-Host "  3. Claude:      abra o projeto e rode /mcp pra aprovar os servidores" }
+if ($selCodex)       { Write-Host "  3. Codex:       abra o projeto (lê AGENTS.md); MCP em ~/.codex/config.toml" }
+if ($selOpencode)    { Write-Host "  3. OpenCode:    abra o projeto (lê AGENTS.md + opencode.json)" }
+if ($selAntigravity) { Write-Host "  3. Antigravity: abra o projeto (lê AGENTS.md + .agents\); MCP global em ~/.gemini (Settings > Customizations > Open MCP Config)" }
 Write-Host "  4. Preencha docs\agent\context.md com o stack real do projeto."

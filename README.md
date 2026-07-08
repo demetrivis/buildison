@@ -14,14 +14,14 @@ Os agents detectam automaticamente o stack do projeto (Python, Node.js, Go, etc.
 
 ### Instalador (recomendado) — multi-agente
 
-Um comando configura a toolbox no seu projeto para **Claude Code, Codex e/ou OpenCode/Hermes**, a partir de
-uma fonte única (`AGENTS.md` + `.claude/` + `docs/agent/` + `.mcp.json`). Sem duplicar conteúdo: cada agente
-recebe só o "glue" no formato nativo dele.
+Um comando configura a toolbox no seu projeto para **Claude Code, Codex, OpenCode/Hermes e/ou Antigravity**, a
+partir de uma fonte única (`AGENTS.md` + `.claude/` + `docs/agent/` + `.mcp.json`). Sem duplicar conteúdo: cada
+agente recebe só o "glue" no formato nativo dele.
 
 **Mac / Linux** (bash):
 ```bash
 # npx direto do GitHub (não precisa de conta npm)
-npx github:demetrivis/buildison install --dir . --agents claude,codex,opencode
+npx github:demetrivis/buildison install --dir . --agents claude,codex,opencode,antigravity
 
 # ou remoto via curl (clona sozinho, interativo)
 curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
@@ -38,7 +38,7 @@ irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1 | ie
 
 # ou clone + script com flags
 git clone https://github.com/demetrivis/buildison.git; cd buildison
-.\install.ps1 -Dir C:\caminho\do\projeto -Agents claude,codex,opencode -Infra -Serena
+.\install.ps1 -Dir C:\caminho\do\projeto -Agents claude,codex,opencode,antigravity -Infra -Serena
 ```
 
 > No PowerShell o interativo funciona nativo (`Read-Host`). O `curl | bash`/`npx` também rodam no Windows, mas
@@ -51,10 +51,17 @@ Sem flags, ele roda **interativo** (pergunta destino e agentes). O que cada agen
 | Claude Code | `.claude/` + `CLAUDE.md` (`@imports`) + `.mcp.json` |
 | Codex | `AGENTS.md` (nativo) + bloco MCP em `~/.codex/config.toml` |
 | OpenCode/Hermes | `AGENTS.md` (nativo) + `opencode.json` |
+| Antigravity (Google) | `AGENTS.md` (nativo) + `.agents/` (roster + skills) + MCP no config global `~/.gemini/.../mcp_config.json` |
 | _(todos)_ | `AGENTS.md` + `docs/agent/context.md` + `decisions.md` |
 
 O instalador é **idempotente**: não sobrescreve `docs/agent/context.md` (seu conhecimento do projeto) nem
 duplica o bloco MCP do Codex. Use `--force` para regravar os arquivos gerados.
+
+> **Antigravity** lê o `AGENTS.md` da raiz nativamente (mesmo padrão do Codex/OpenCode). O `.agents/`
+> (roster de agentes + skills) é **espelhado de `.claude/`** por `scripts/gen-antigravity.mjs` — rode-o pra
+> ressincronizar. O MCP dele é **global** (`~/.gemini/…/mcp_config.json`, não por-projeto): o installer/switch
+> gravam as 3 chaves (`spec-workflow`/`serena`/`qdrant-memory`) com o **caminho absoluto do projeto atual** e a
+> collection dele — reflete o último projeto instalado/trocado. Confira em _Settings › Customizations › Open MCP Config_.
 
 #### Pré-requisitos da máquina (opt-in, uma vez por máquina)
 
@@ -102,7 +109,7 @@ $env:BUILDISON_ARGS = '-Memory vps -QdrantUrl https://qdrant.seu-dominio.com -Ye
 irm https://raw.githubusercontent.com/demetrivis/buildison/main/switch.ps1 | iex
 ```
 
-Faz backup automático (`*.bak.<timestamp>`) e atualiza os 3 agentes (Claude/Codex/OpenCode). Reinicie o Claude depois.
+Faz backup automático (`*.bak.<timestamp>`) e atualiza os agentes **já configurados** (Claude/Codex/OpenCode/Antigravity). Reinicie o agente depois.
 
 ### Agente `suporte` (diagnóstico)
 
@@ -222,7 +229,7 @@ cd /caminho/do/seu/projeto && claude
 
 Além das skills, o template traz uma stack para dar **contexto, memória e planejamento estruturado** a agentes de código. A documentação é dividida em **permanente** (vem do boilerplate, não muda por projeto) e **dinâmica** (o agente mantém, muda por projeto):
 
-- **`AGENTS.md`** *(permanente)* — fonte única de regras + infra + toolbox, lida por **todos** os agentes (Claude Code, Codex, MiniMax, Hermes, Cursor...). O Claude Code lê via `@import` no `CLAUDE.md`.
+- **`AGENTS.md`** *(permanente)* — fonte única de regras + infra + toolbox, lida por **todos** os agentes (Claude Code, Codex, MiniMax, Hermes, Cursor, Antigravity...). O Claude Code lê via `@import` no `CLAUDE.md`; o Antigravity lê nativo + espelha o roster em `.agents/`.
 - **`docs/agent/context.md`** *(dinâmico)* — mapa do projeto: stack real, comandos, arquitetura. O agente atualiza conforme constrói.
 - **`docs/agent/decisions.md`** *(dinâmico)* — log de decisões técnicas.
 - **`.mcp.json`** — toolbox MCP: `spec-workflow` (planejamento), `serena` (navegação semântica), `qdrant-memory` (memória vetorial). Context7 já vem global.
@@ -267,6 +274,11 @@ AGENTS.md             # contrato fixo do repo para agentes
     ├── cloudflare/
     ├── seo-technical/
     └── favicon/
+.agents/              # espelho p/ Antigravity (gerado de .claude/ por scripts/gen-antigravity.mjs)
+├── agents.md         # roster dos agentes
+└── skills/           # uma skill por arquivo
+scripts/
+└── gen-antigravity.mjs   # regenera .agents/ a partir de .claude/
 
 AGENTS.md             # PERMANENTE: regras + infra + toolbox (fonte única, todos os agentes)
 CLAUDE.md             # bridge Claude Code → @AGENTS.md + @docs/agent/context.md
