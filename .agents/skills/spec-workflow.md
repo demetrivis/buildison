@@ -3,7 +3,7 @@ name: spec-workflow
 description: "Planejamento estruturado de features via SpecWorkflow MCP: requirements → design técnico → tasks → implementação → validação. Use para features não triviais, quando o usuário pedir para 'planejar', 'criar spec', 'quebrar em tasks', 'fazer requirements/design', ou quando uma mudança for grande o suficiente para justificar trilho de execução em vez de codar direto."
 ---
 
-<!-- Gerado de .claude/skills/spec-workflow/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/spec-workflow/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # SpecWorkflow — planejamento estruturado
 

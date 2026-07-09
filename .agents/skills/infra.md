@@ -3,7 +3,7 @@ name: infra
 description: "Project infrastructure conventions: folder structure, Docker, env vars, deployment, and architectural decisions. Use when setting up project structure, configuring Docker, managing environment variables, or making infrastructure decisions."
 ---
 
-<!-- Gerado de .claude/skills/infra/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/infra/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Infrastructure
 
@@ -56,4 +56,4 @@ project-root/
 - @references/env-config.md — Gerenciamento de variáveis de ambiente e secrets
 - @references/adr-template.md — Template para Architecture Decision Records
 
-> Referências detalhadas desta skill vivem em `.claude/skills/infra/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/infra/references/`.

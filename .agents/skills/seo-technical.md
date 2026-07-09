@@ -3,7 +3,7 @@ name: seo-technical
 description: "Implement technical SEO infrastructure for Next.js apps. Use this skill when setting up sitemaps, robots.txt, meta tags, OpenGraph, structured data (JSON-LD), canonical URLs, and other technical SEO elements. Covers Next.js 15/16 App Router patterns and 2025 best practices."
 ---
 
-<!-- Gerado de .claude/skills/seo-technical/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/seo-technical/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Technical SEO Implementation (Next.js 2025)
 
@@ -501,4 +501,4 @@ After implementing, verify:
 4. [ ] Test with [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/)
 5. [ ] Submit sitemap to Google Search Console
 
-> Referências detalhadas desta skill vivem em `.claude/skills/seo-technical/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/seo-technical/references/`.

@@ -3,7 +3,7 @@ name: api
 description: "HTTP layer conventions: routing, schemas/DTOs, error handling, middleware, and API contracts. Use when creating endpoints, designing request/response schemas, handling errors, or working with middlewares."
 ---
 
-<!-- Gerado de .claude/skills/api/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/api/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # API / HTTP
 
@@ -50,4 +50,4 @@ Convenções da camada HTTP do projeto. Adapte à framework em uso (FastAPI, Exp
 - @references/schemas.md — Schemas de validação, serialização
 - @references/error-handling.md — Error handlers, domain-to-HTTP mapping, middleware
 
-> Referências detalhadas desta skill vivem em `.claude/skills/api/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/api/references/`.

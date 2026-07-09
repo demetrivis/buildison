@@ -2,7 +2,7 @@
 description: "Montar uma Equipe de Teammates"
 ---
 
-<!-- Gerado de .claude/commands/team.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/team.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/team` command. Your job is to evaluate the current task, decide if it benefits from an agent team, and if so, create a team of teammates — independent Claude Code sessions that coordinate through a shared task list and communicate directly with each other.
 

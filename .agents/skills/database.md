@@ -3,7 +3,7 @@ name: database
 description: "Supabase + PostgreSQL + Redis conventions: schema design, migrations, RLS, repositories, client setup, VPS connections, connection pools, caching. Use when designing tables, writing queries, creating migrations, configuring RLS policies, connecting to remote databases, setting up Redis cache, or working with the Supabase client."
 ---
 
-<!-- Gerado de .claude/skills/database/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/database/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Database — Supabase + PostgreSQL + Redis
 
@@ -75,4 +75,4 @@ ck_payments_amount_positive
 - @references/redis-vps.md — Conexão remota Redis, pool, cache patterns, rate limiting, pub/sub
 - @references/health-checks.md — Health checks de conectividade, retry com backoff, circuit breaker
 
-> Referências detalhadas desta skill vivem em `.claude/skills/database/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/database/references/`.

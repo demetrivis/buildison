@@ -3,7 +3,7 @@ name: favicon
 description: "Generate favicons and app icons for Next.js projects. Creates all required sizes, formats, and configures metadata."
 ---
 
-<!-- Gerado de .claude/skills/favicon/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/favicon/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Favicon Generator
 
@@ -508,4 +508,4 @@ public/
 | Emoji not rendering | Use system emoji font |
 | Gradient looks wrong | Use standard CSS gradient syntax |
 
-> Referências detalhadas desta skill vivem em `.claude/skills/favicon/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/favicon/references/`.

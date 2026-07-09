@@ -2,7 +2,7 @@
 description: "Operações Git Assistidas"
 ---
 
-<!-- Gerado de .claude/commands/git.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/git.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/git` command. Your job is to help with git operations intelligently — not just running commands, but understanding context, choosing the right strategy, and preventing mistakes.
 

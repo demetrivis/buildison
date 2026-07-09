@@ -3,7 +3,7 @@ name: local-infra
 description: "Monta stack de infra local (Postgres + Redis + Qdrant + ngrok + cloudflared) via Docker Desktop para desenvolvimento. Use quando precisar criar ~/local-infra/docker-compose.yml do zero, adicionar serviços ao stack local, configurar tunnel (ngrok ou Cloudflare), subir o Qdrant para memória vetorial de agentes, ou quando o usuário pedir 'subir a infra local', 'setup do docker', 'montar ambiente local de dev'."
 ---
 
-<!-- Gerado de .claude/skills/local-infra/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/local-infra/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Local Infra — Docker Desktop stack
 
@@ -148,4 +148,4 @@ O roteamento hostname→serviço fica **no dashboard**, não no compose. O conta
 - @references/docker-compose.md — `docker-compose.yml` completo comentado
 - @references/troubleshooting.md — problemas comuns (porta ocupada, host.docker.internal não resolve, ngrok token, etc)
 
-> Referências detalhadas desta skill vivem em `.claude/skills/local-infra/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/local-infra/references/`.

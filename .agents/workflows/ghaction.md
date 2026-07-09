@@ -2,7 +2,7 @@
 description: "Criar GitHub Actions Workflows"
 ---
 
-<!-- Gerado de .claude/commands/ghaction.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/ghaction.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/ghaction` command. Your job is to create, edit, or debug GitHub Actions workflows for this project.
 

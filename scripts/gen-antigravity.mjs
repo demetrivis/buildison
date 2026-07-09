@@ -1,27 +1,36 @@
 #!/usr/bin/env node
-// gen-antigravity — gera a camada .agents/ (glue do Google Antigravity) a partir da
-// fonte única do buildison em .claude/. O Antigravity lê AGENTS.md nativamente (regras);
-// este gerador espelha o ROSTER de agentes e as SKILLS para o formato .agents/ que ele conhece.
+// gen-antigravity — gera a camada .agents/ (glue do Google Antigravity) a partir da fonte
+// única em .claude/. O Antigravity lê AGENTS.md nativamente (regras) e reconhece o .agents/
+// para SKILLS e WORKFLOWS. Ele NÃO registra "agentes custom" via arquivo — os subagentes
+// (Browser/Terminal) são orquestrados internamente pela IDE. Por isso este gerador NÃO
+// produz um roster de agentes; os agentes "de missão" viram WORKFLOWS (slash-commands).
 //
-// Uso:  node scripts/gen-antigravity.mjs        (roda a partir da raiz do repo)
+// Uso:
+//   node scripts/gen-antigravity.mjs                 (gera no próprio repo buildison)
+//   node scripts/gen-antigravity.mjs /caminho/projeto (gera no .claude/ daquele projeto)
 //
 // Saída (sobrescrita — NÃO edite à mão, rode de novo pra ressincronizar):
-//   .agents/agents.md            — roster dos agentes (name + description do frontmatter)
-//   .agents/skills/<nome>.md     — uma skill por arquivo (frontmatter + corpo do SKILL.md)
-//   .agents/workflows/<nome>.md  — um slash-command por arquivo (de .claude/commands/)
+//   .agents/skills/<nome>.md     — uma skill por arquivo (de .claude/skills/<nome>/SKILL.md)
+//   .agents/workflows/<nome>.md  — um slash-command por arquivo:
+//       - de .claude/commands/*.md  (comandos)
+//       - dos agentes de missão em .claude/agents/ (arq-info, arq-info-web, design-system-extractor)
 //
-// Fonte de verdade continua em .claude/. Este é um espelho de descoberta/leitura.
+// Fonte de verdade continua em .claude/. Este é um espelho de descoberta/execução.
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const claudeAgents = join(repoRoot, '.claude', 'agents');
-const claudeSkills = join(repoRoot, '.claude', 'skills');
-const claudeCommands = join(repoRoot, '.claude', 'commands');
-const outDir = join(repoRoot, '.agents');
+const root = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), '..');
+const claudeAgents = join(root, '.claude', 'agents');
+const claudeSkills = join(root, '.claude', 'skills');
+const claudeCommands = join(root, '.claude', 'commands');
+const outDir = join(root, '.agents');
 const outSkills = join(outDir, 'skills');
 const outWorkflows = join(outDir, 'workflows');
+
+// Agentes "de missão" (você descreve → roda uma vez) que fazem sentido como slash-command.
+// Os agentes de camada (api, db, logic, ...) NÃO entram: suas convenções já vivem nas skills.
+const MISSION_AGENTS = ['arq-info', 'arq-info-web', 'design-system-extractor'];
 
 // Extrai o bloco de frontmatter YAML (--- ... ---) e o corpo. Parser tolerante:
 // só precisamos de name/description (linhas simples, valor com ou sem aspas).
@@ -44,43 +53,15 @@ function parse(md) {
   return { fm, body };
 }
 
-function warn(msg) { process.stderr.write(`! ${msg}\n`); }
-
-// ---------- agents -> .agents/agents.md ----------
-function buildAgents() {
-  const files = readdirSync(claudeAgents).filter((f) => f.endsWith('.md')).sort();
-  const rows = [];
-  for (const f of files) {
-    const { fm } = parse(readFileSync(join(claudeAgents, f), 'utf8'));
-    const name = fm.name || f.replace(/\.md$/, '');
-    const desc = fm.description || '(sem description no frontmatter)';
-    if (!fm.name) warn(`agente ${f} sem 'name:' no frontmatter — usando o nome do arquivo`);
-    rows.push({ name, desc, file: f });
-  }
-  const lines = [];
-  lines.push('# buildison — roster de agentes (espelho de .claude/agents)');
-  lines.push('');
-  lines.push('> Gerado por `scripts/gen-antigravity.mjs` a partir de `.claude/agents/*.md`.');
-  lines.push('> **Não edite à mão** — rode o gerador pra ressincronizar. Fonte de verdade: `.claude/agents/`.');
-  lines.push('');
-  lines.push('O Antigravity lê o `AGENTS.md` da raiz nativamente (regras permanentes + toolbox).');
-  lines.push('Este arquivo espelha os **papéis especialistas** do buildison para o Antigravity adotar a mesma');
-  lines.push('divisão de trabalho. As convenções por camada estão em `.agents/skills/`.');
-  lines.push('');
-  for (const r of rows) {
-    lines.push(`## ${r.name}`);
-    lines.push('');
-    lines.push(r.desc);
-    lines.push('');
-    lines.push(`_Instruções completas do papel: \`.claude/agents/${r.file}\` (markdown legível)._`);
-    lines.push('');
-  }
-  writeFileSync(join(outDir, 'agents.md'), lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n');
-  return rows.length;
+// description do frontmatter do Antigravity: 1 linha, ≤250 chars.
+function shortDesc(s, fallback) {
+  const d = (s || fallback || '').replace(/\s+/g, ' ').trim();
+  return d.length > 240 ? d.slice(0, 239).trimEnd() + '…' : d;
 }
 
 // ---------- skills -> .agents/skills/<nome>.md ----------
 function buildSkills() {
+  if (!existsSync(claudeSkills)) return 0;
   const entries = readdirSync(claudeSkills).filter((d) => {
     const p = join(claudeSkills, d);
     return statSync(p).isDirectory() && existsSync(join(p, 'SKILL.md'));
@@ -89,20 +70,11 @@ function buildSkills() {
   for (const d of entries) {
     const { fm, body } = parse(readFileSync(join(claudeSkills, d, 'SKILL.md'), 'utf8'));
     const name = fm.name || d;
-    const desc = fm.description || '';
-    const hasRefs = existsSync(join(claudeSkills, d, 'references'));
-    const out = [];
-    out.push('---');
-    out.push(`name: ${name}`);
-    if (desc) out.push(`description: ${JSON.stringify(desc)}`);
-    out.push('---');
-    out.push('');
-    out.push(`<!-- Gerado de .claude/skills/${d}/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->`);
-    out.push('');
-    out.push(body);
-    if (hasRefs) {
-      out.push('');
-      out.push(`> Referências detalhadas desta skill vivem em \`.claude/skills/${d}/references/\` (repo buildison).`);
+    const out = ['---', `name: ${name}`];
+    if (fm.description) out.push(`description: ${JSON.stringify(fm.description)}`);
+    out.push('---', '', `<!-- Gerado de .claude/skills/${d}/SKILL.md por gen-antigravity.mjs — não edite à mão. -->`, '', body);
+    if (existsSync(join(claudeSkills, d, 'references'))) {
+      out.push('', `> Referências detalhadas: \`.claude/skills/${d}/references/\`.`);
     }
     writeFileSync(join(outSkills, `${name}.md`), out.join('\n').trimEnd() + '\n');
     n++;
@@ -110,18 +82,28 @@ function buildSkills() {
   return n;
 }
 
-// ---------- commands -> .agents/workflows/<nome>.md ----------
-// O Antigravity mapeia /<arquivo> -> .agents/workflows/<arquivo>.md (frontmatter só exige description).
-// (Algumas fontes citam .agent/workflows/ no singular — se os slash-commands não aparecerem na sua
-//  versão, renomeie a pasta pra .agent/workflows/. O codelab oficial do Google usa .agents/.)
-function buildWorkflows() {
+// escreve um arquivo de workflow (frontmatter description + corpo)
+function writeWorkflow(name, description, body, sourceNote) {
+  const out = [
+    '---',
+    `description: ${JSON.stringify(description)}`,
+    '---',
+    '',
+    `<!-- ${sourceNote} — não edite à mão. -->`,
+    '',
+    body.trimEnd(),
+  ];
+  writeFileSync(join(outWorkflows, `${name}.md`), out.join('\n').trimEnd() + '\n');
+}
+
+// ---------- comandos -> .agents/workflows/<nome>.md ----------
+function buildCommandWorkflows() {
+  if (!existsSync(claudeCommands)) return 0;
   const files = readdirSync(claudeCommands).filter((f) => f.endsWith('.md')).sort();
   let n = 0;
   for (const f of files) {
     const raw = readFileSync(join(claudeCommands, f), 'utf8');
-    const lines = raw.split('\n');
-    const head = lines.find((l) => l.trim().startsWith('#'));
-    // description: o texto após o "—" do título "# /cmd — Descrição"; senão o nome do comando
+    const head = raw.split('\n').find((l) => l.trim().startsWith('#'));
     let desc = f.replace(/\.md$/, '');
     if (head) {
       let t = head.replace(/^#+\s*/, '').trim();
@@ -129,34 +111,38 @@ function buildWorkflows() {
       t = dash !== -1 ? t.slice(dash + 1).trim() : t.replace(/^\/\S+\s*/, '').trim();
       if (t) desc = t;
     }
-    desc = desc.slice(0, 250);
-    // corpo: tudo depois da primeira linha de título (frontmatter carrega a description)
     let body = raw;
     if (head) { const i = raw.indexOf(head); body = raw.slice(i + head.length).replace(/^\s*\n/, ''); }
-    const out = [
-      '---',
-      `description: ${JSON.stringify(desc)}`,
-      '---',
-      '',
-      `<!-- Gerado de .claude/commands/${f} por scripts/gen-antigravity.mjs — não edite à mão. -->`,
-      '',
-      body.trimEnd(),
-    ];
-    writeFileSync(join(outWorkflows, f), out.join('\n').trimEnd() + '\n');
+    writeWorkflow(f.replace(/\.md$/, ''), shortDesc(desc), body, `Gerado de .claude/commands/${f} por gen-antigravity.mjs`);
+    n++;
+  }
+  return n;
+}
+
+// ---------- agentes de missão -> .agents/workflows/<nome>.md ----------
+// No Antigravity não há "agente custom" invocável; então a persona vira um workflow disparável por /.
+function buildAgentWorkflows() {
+  if (!existsSync(claudeAgents)) return 0;
+  let n = 0;
+  for (const name of MISSION_AGENTS) {
+    const file = join(claudeAgents, `${name}.md`);
+    if (!existsSync(file)) continue;
+    const { fm, body } = parse(readFileSync(file, 'utf8'));
+    writeWorkflow(name, shortDesc(fm.description, name), body, `Gerado do agente .claude/agents/${name}.md por gen-antigravity.mjs`);
     n++;
   }
   return n;
 }
 
 // ---------- run ----------
-if (!existsSync(claudeAgents) || !existsSync(claudeSkills)) {
-  process.stderr.write('x .claude/agents ou .claude/skills não encontrado — rode a partir da raiz do repo buildison.\n');
+if (!existsSync(claudeSkills) && !existsSync(claudeCommands) && !existsSync(claudeAgents)) {
+  process.stderr.write(`x nenhum .claude/{skills,commands,agents} em ${root} — alvo inválido?\n`);
   process.exit(1);
 }
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outSkills, { recursive: true });
 mkdirSync(outWorkflows, { recursive: true });
-const na = buildAgents();
 const ns = buildSkills();
-const nw = existsSync(claudeCommands) ? buildWorkflows() : 0;
-process.stdout.write(`OK .agents/ gerado: ${na} agentes em agents.md, ${ns} skills em skills/, ${nw} workflows em workflows/\n`);
+const nc = buildCommandWorkflows();
+const nawf = buildAgentWorkflows();
+process.stdout.write(`OK ${outDir}: ${ns} skills, ${nc + nawf} workflows (${nc} comandos + ${nawf} agentes de missão). Sem roster de agentes (Antigravity não registra agente via arquivo).\n`);

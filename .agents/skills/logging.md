@@ -3,7 +3,7 @@ name: logging
 description: "Structured logging standards with JSON output. Use when writing logs, configuring logging, reviewing log patterns, or adding observability to code."
 ---
 
-<!-- Gerado de .claude/skills/logging/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/logging/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Structured Logging
 
@@ -54,4 +54,4 @@ Para detalhes de implementação, consulte:
 - @references/patterns.md — Padrões de logging em funções, performance, middleware
 - @references/analysis.md — Como analisar e diagnosticar logs do projeto
 
-> Referências detalhadas desta skill vivem em `.claude/skills/logging/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/logging/references/`.

@@ -2,7 +2,7 @@
 description: "Criar Pull Request"
 ---
 
-<!-- Gerado de .claude/commands/pr.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/pr.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/pr` command. Create a well-structured pull request on GitHub.
 

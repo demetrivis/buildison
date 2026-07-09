@@ -2,7 +2,7 @@
 description: "Analisar Logs do Projeto com Subagente"
 ---
 
-<!-- Gerado de .claude/commands/logs.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/logs.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/logs` command. Your job is to spawn one or more subagents to read, parse, and analyze the project's logs. The goal is a diagnosis: what happened, what's wrong, what's the probable cause.
 

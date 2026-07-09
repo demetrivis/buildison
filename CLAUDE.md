@@ -51,7 +51,7 @@ CLAUDE.md              # bridge Claude Code → @AGENTS.md + @docs/agent/context
 ├── agents/         # db, api, logic, infra, logger, security-auditor, golang, prisma, nestjs, postgrest, arq-info, arq-info-web, design-system-extractor, suporte
 ├── commands/       # /commit, /push, /pr, /docker, /team, ...
 └── skills/         # database, api, infra, logging, local-infra, agent-memory, spec-workflow, golang, nestjs, prisma, postgrest, plano-operacao, ...
-.agents/               # espelho p/ Antigravity (roster + skills), gerado de .claude/ por scripts/gen-antigravity.mjs
+.agents/               # glue p/ Antigravity (skills + workflows), gerado de .claude/ por scripts/gen-antigravity.mjs
 
 docs/
 ├── agent/            # DINÂMICO: context.md (mapa do projeto) + decisions.md (log) — o agente mantém

@@ -2,7 +2,7 @@
 description: "Gerar Stack para Portainer (Docker Swarm + Traefik)"
 ---
 
-<!-- Gerado de .claude/commands/portainer.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/portainer.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/portainer` command. Your job is to generate a production-ready Portainer stack file (Docker Swarm compose) for this project, with Traefik as reverse proxy.
 

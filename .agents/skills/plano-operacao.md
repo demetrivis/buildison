@@ -3,7 +3,7 @@ name: plano-operacao
 description: "Read-only architecture documentation pipeline. Point it at the current project and it proposes four artifacts: a C4 model in Structurizr DSL, a deployment view, a data model / ERD with MDM analysis, and an ADR. Use when the user asks to document the architecture, map the system, produce C4 / Structurizr / deployment diagrams, model the data / entities / MDM, or generate an architecture decision record. Never writes to the repository."
 ---
 
-<!-- Gerado de .claude/skills/plano-operacao/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/plano-operacao/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Plano de Operação — Documentação de Arquitetura (read-only)
 
@@ -74,4 +74,4 @@ e `docs/agent/decisions.md` — como texto sugerido, para o humano aplicar (a sk
 Português do Brasil, prático e direto. Artefatos versionáveis (DSL, Mermaid) acima de prosa.
 Incerteza explícita.
 
-> Referências detalhadas desta skill vivem em `.claude/skills/plano-operacao/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/plano-operacao/references/`.

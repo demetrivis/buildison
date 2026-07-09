@@ -2,7 +2,7 @@
 description: "Push Seguro para o Remote"
 ---
 
-<!-- Gerado de .claude/commands/push.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/push.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/push` command. Push the current branch to the remote safely.
 

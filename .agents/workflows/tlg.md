@@ -2,7 +2,7 @@
 description: "Tree Log Graph"
 ---
 
-<!-- Gerado de .claude/commands/tlg.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/tlg.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/tlg` command. Show a visual git history with branch topology.
 

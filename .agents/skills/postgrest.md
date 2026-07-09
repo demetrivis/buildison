@@ -3,7 +3,7 @@ name: postgrest
 description: "PostgREST conventions: database-first APIs, schema design, RLS, views, RPC functions, permissions, pagination and API exposure directly from PostgreSQL."
 ---
 
-<!-- Gerado de .claude/skills/postgrest/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/postgrest/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # PostgREST
 

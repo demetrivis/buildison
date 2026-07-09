@@ -2,7 +2,7 @@
 description: "Explore the Project"
 ---
 
-<!-- Gerado de .claude/commands/explore.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/explore.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/explore` command. Map the project — structure, stack, patterns, and anything notable.
 

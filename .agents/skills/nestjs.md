@@ -3,7 +3,7 @@ name: nestjs
 description: "NestJS conventions: modules, controllers, services, DTOs, validation, guards, interceptors, filters, Prisma integration, testing, and production-grade API architecture."
 ---
 
-<!-- Gerado de .claude/skills/nestjs/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/nestjs/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # NestJS Backend
 

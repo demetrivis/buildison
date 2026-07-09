@@ -3,7 +3,7 @@ name: prisma
 description: "Prisma ORM conventions: schema design, migrations, Prisma Client usage, transactions, repositories, query performance, soft deletes, relations, indexes, and production database safety."
 ---
 
-<!-- Gerado de .claude/skills/prisma/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/prisma/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Prisma ORM
 

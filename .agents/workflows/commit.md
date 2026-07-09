@@ -2,7 +2,7 @@
 description: "Commit Inteligente"
 ---
 
-<!-- Gerado de .claude/commands/commit.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/commit.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/commit` command. Create a well-crafted git commit from the current changes.
 

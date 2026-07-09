@@ -3,7 +3,7 @@ name: agent-memory
 description: "Memória vetorial persistente do agente via Qdrant (MCP qdrant-memory). Use para decidir o que salvar/recuperar como contexto durável do projeto, nomear collections por projeto, modelar payload de metadados e seguir a política do que NUNCA guardar. Acione quando o usuário pedir para 'lembrar', 'salvar decisão', 'recuperar contexto', configurar Qdrant ou trabalhar com memória de agente."
 ---
 
-<!-- Gerado de .claude/skills/agent-memory/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/agent-memory/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Agent Memory — Qdrant
 

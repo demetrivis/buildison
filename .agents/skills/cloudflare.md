@@ -3,7 +3,7 @@ name: cloudflare
 description: "Setup domains in Cloudflare with DNS for Clerk, Vercel, and email routing. Use when adding new domains, configuring DNS records, or setting up email redirects."
 ---
 
-<!-- Gerado de .claude/skills/cloudflare/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/cloudflare/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Cloudflare Setup
 
@@ -430,4 +430,4 @@ wrangler r2 bucket cors get BUCKET_NAME
 | Custom domain not working | Ensure CNAME is proxied (orange cloud) |
 | Upload fails | Verify Content-Type header matches file |
 
-> Referências detalhadas desta skill vivem em `.claude/skills/cloudflare/references/` (repo buildison).
+> Referências detalhadas: `.claude/skills/cloudflare/references/`.

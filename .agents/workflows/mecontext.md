@@ -2,7 +2,7 @@
 description: "Atualizar Memória e Contexto do Projeto"
 ---
 
-<!-- Gerado de .claude/commands/mecontext.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/mecontext.md por gen-antigravity.mjs — não edite à mão. -->
 
 Analise o estado atual do projeto e atualize o contexto e memória com base no que foi feito, aprendido ou decidido nessa sessão.
 

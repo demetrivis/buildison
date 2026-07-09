@@ -51,21 +51,22 @@ Sem flags, ele roda **interativo** (pergunta destino e agentes). O que cada agen
 | Claude Code | `.claude/` + `CLAUDE.md` (`@imports`) + `.mcp.json` |
 | Codex | `AGENTS.md` (nativo) + bloco MCP em `~/.codex/config.toml` |
 | OpenCode/Hermes | `AGENTS.md` (nativo) + `opencode.json` |
-| Antigravity (Google) | `AGENTS.md` (nativo) + `.agents/` (roster + skills) + MCP no config global `~/.gemini/.../mcp_config.json` |
+| Antigravity (Google) | `AGENTS.md` (nativo) + `.agents/` (skills + workflows) + MCP no config global `~/.gemini/.../mcp_config.json` |
 | _(todos)_ | `AGENTS.md` + `docs/agent/context.md` + `decisions.md` |
 
 O instalador é **idempotente**: não sobrescreve `docs/agent/context.md` (seu conhecimento do projeto) nem
 duplica o bloco MCP do Codex. Use `--force` para regravar os arquivos gerados.
 
-> **Antigravity** lê o `AGENTS.md` da raiz nativamente (mesmo padrão do Codex/OpenCode). O `.agents/`
-> (roster de agentes + skills + workflows) é **espelhado de `.claude/`** por `scripts/gen-antigravity.mjs` — rode-o
-> pra ressincronizar. Os **workflows** viram slash-commands: `/commit`, `/pr`, `/push`, `/tlg`… (nome do arquivo =
-> comando). O MCP dele é **global** (`~/.gemini/…/mcp_config.json`, não por-projeto): o installer/switch gravam as
-> 3 chaves (`spec-workflow`/`serena`/`qdrant-memory`) com o **caminho absoluto do projeto atual** e a collection
-> dele — reflete o último projeto instalado/trocado. Confira em _Settings › Customizations › Open MCP Config_.
+> **Antigravity** lê o `AGENTS.md` da raiz nativamente (regras). O que ele reconhece por arquivo é **skill** e
+> **workflow** — **não** existe "agente custom" registrável (os subagentes Browser/Terminal são orquestrados
+> internamente pela IDE). Por isso o `.agents/` gerado (`scripts/gen-antigravity.mjs`, espelho de `.claude/`) tem
+> só **`skills/`** e **`workflows/`** — sem roster. Os **workflows** viram slash-commands: `/commit`, `/pr`, `/tlg`…
+> e os agentes de missão (`arq-info`, `arq-info-web`, `design-system-extractor`) também viram `/comando`. Os agentes
+> de camada (api, db, …) não têm equivalente — suas convenções já vivem nas **skills**.
 >
-> _Pasta dos workflows:_ o codelab oficial do Google usa `.agents/workflows/` (o que geramos); se na sua versão os
-> slash-commands não aparecerem, renomeie pra `.agent/workflows/` (singular — citada por fontes de terceiros).
+> MCP: config **global** (`~/.gemini/…/mcp_config.json`, não por-projeto). O installer/switch gravam as 3 chaves
+> (`spec-workflow`/`serena`/`qdrant-memory`) com o **caminho absoluto do projeto atual** e a collection dele — reflete
+> o último projeto instalado/trocado. Confira em _Settings › Customizations › Open MCP Config_.
 
 #### Pré-requisitos da máquina (opt-in, uma vez por máquina)
 
@@ -233,7 +234,7 @@ cd /caminho/do/seu/projeto && claude
 
 Além das skills, o template traz uma stack para dar **contexto, memória e planejamento estruturado** a agentes de código. A documentação é dividida em **permanente** (vem do boilerplate, não muda por projeto) e **dinâmica** (o agente mantém, muda por projeto):
 
-- **`AGENTS.md`** *(permanente)* — fonte única de regras + infra + toolbox, lida por **todos** os agentes (Claude Code, Codex, MiniMax, Hermes, Cursor, Antigravity...). O Claude Code lê via `@import` no `CLAUDE.md`; o Antigravity lê nativo + espelha o roster em `.agents/`.
+- **`AGENTS.md`** *(permanente)* — fonte única de regras + infra + toolbox, lida por **todos** os agentes (Claude Code, Codex, MiniMax, Hermes, Cursor, Antigravity...). O Claude Code lê via `@import` no `CLAUDE.md`; o Antigravity lê nativo + usa `.agents/` (skills + workflows).
 - **`docs/agent/context.md`** *(dinâmico)* — mapa do projeto: stack real, comandos, arquitetura. O agente atualiza conforme constrói.
 - **`docs/agent/decisions.md`** *(dinâmico)* — log de decisões técnicas.
 - **`.mcp.json`** — toolbox MCP: `spec-workflow` (planejamento), `serena` (navegação semântica), `qdrant-memory` (memória vetorial). Context7 já vem global.
@@ -278,10 +279,9 @@ AGENTS.md             # contrato fixo do repo para agentes
     ├── cloudflare/
     ├── seo-technical/
     └── favicon/
-.agents/              # espelho p/ Antigravity (gerado de .claude/ por scripts/gen-antigravity.mjs)
-├── agents.md         # roster dos agentes (de .claude/agents/)
+.agents/              # glue p/ Antigravity (gerado de .claude/ por scripts/gen-antigravity.mjs)
 ├── skills/           # uma skill por arquivo (de .claude/skills/)
-└── workflows/        # um slash-command por arquivo (de .claude/commands/) — ex.: /commit, /pr
+└── workflows/        # slash-commands (de .claude/commands/ + agentes de missão) — /commit, /arq-info-web…
 scripts/
 └── gen-antigravity.mjs   # regenera .agents/ a partir de .claude/
 

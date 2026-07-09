@@ -3,7 +3,7 @@ name: golang
 description: "Go backend conventions: handlers, services, repositories, context propagation, error handling, testing, project structure, and production-ready APIs. Use when working on Go projects using Gin, Fiber, Chi, Echo or standard net/http."
 ---
 
-<!-- Gerado de .claude/skills/golang/SKILL.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/skills/golang/SKILL.md por gen-antigravity.mjs — não edite à mão. -->
 
 # Golang Backend
 

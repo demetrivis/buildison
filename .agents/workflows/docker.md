@@ -2,7 +2,7 @@
 description: "Build e Gerenciamento de Imagens Docker"
 ---
 
-<!-- Gerado de .claude/commands/docker.md por scripts/gen-antigravity.mjs — não edite à mão. -->
+<!-- Gerado de .claude/commands/docker.md por gen-antigravity.mjs — não edite à mão. -->
 
 You have been invoked with the `/docker` command. Your job is to create, optimize, debug, and manage Dockerfiles and docker-compose configurations for this project.
 
