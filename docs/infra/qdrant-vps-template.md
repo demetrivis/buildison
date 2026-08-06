@@ -213,3 +213,15 @@ Reinicie o terminal/Claude Code pra valer.
 - **Claude Code NÃO lê o `.env` do projeto** pra expandir `${QDRANT_API_KEY}` — precisa estar no ambiente do **shell** que abriu o `claude`.
 - Depois de mudar o `.mcp.json` ou exportar a key, **reinicie o Claude Code** (ele lê config no boot).
 - Se o `/mcp` mostrar `qdrant-memory · failed`: cheque (a) a VPS está no ar (`curl ... /healthz`), (b) `QDRANT_API_KEY` está no env (`echo $QDRANT_API_KEY` no terminal antes de abrir o claude), (c) `QDRANT_URL` no `.mcp.json` é `https://...` (não `http://`).
+- **`SSL certificate problem: unable to get local issuer certificate`** — o Traefik está servindo o `TRAEFIK DEFAULT CERT` (auto-assinado) porque **nunca emitiu** o Let's Encrypt pro subdomínio. Acontece quando o router entrou depois do Traefik subir: o ciclo diário só faz `Testing certificate renew...` do que já está no `acme.json`, não pede os que faltam. Labels, DNS e porta 80 podem estar todos certos. Confirme os domínios emitidos e force a reavaliação:
+
+  ```bash
+  # domínios que realmente têm cert
+  sudo docker exec $(sudo docker ps -q -f name=traefik | head -1) \
+    cat /etc/traefik/letsencrypt/acme.json | grep -oE '"main":"[^"]*"'
+
+  # força o Traefik a reavaliar — emite os faltantes em ~20s
+  sudo docker service update --force traefik_traefik
+  ```
+
+- **Traefik com `--log.filePath` não escreve em stdout** — `docker service logs traefik_traefik` vem **vazio** e parece que não há erro nenhum. O log real está no arquivo dentro do container (`docker exec ... cat /var/log/traefik/traefik.log`).
