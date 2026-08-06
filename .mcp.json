@@ -6,13 +6,26 @@
     },
     "serena": {
       "command": "serena",
-      "args": ["start-mcp-server", "--context", "claude-code", "--project", "."]
+      "args": [
+        "start-mcp-server",
+        "--context",
+        "claude-code",
+        "--project",
+        ".",
+        "--enable-web-dashboard",
+        "false",
+        "--open-web-dashboard",
+        "false",
+        "--enable-gui-log-window",
+        "false"
+      ]
     },
     "qdrant-memory": {
       "command": "uvx",
       "args": ["mcp-server-qdrant"],
       "env": {
-        "QDRANT_URL": "http://localhost:6333",
+        "QDRANT_URL": "https://qdrant.workdodev.com",
+        "QDRANT_API_KEY": "${QDRANT_API_KEY}",
         "COLLECTION_NAME": "agent_project_main",
         "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
       }
