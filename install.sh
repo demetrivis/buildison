@@ -7,10 +7,18 @@
 #   ./install.sh --dir ~/code/meu-projeto # escolhe o destino
 #   ./install.sh --agents claude,codex,opencode,antigravity --yes
 #   ./install.sh --infra                  # também monta o local-infra (stack global)
+#   ./install.sh --update                 # ATUALIZA repo que já tem buildison (ver abaixo)
 #   curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
 #
+# --update  atualiza SÓ o boilerplate e preserva o que é do projeto:
+#             atualiza  AGENTS.md, CLAUDE.md, .claude/, .agents/, .spec-workflow/templates/,
+#                       .mcp.json (mantendo a COLLECTION_NAME já configurada)
+#             preserva  docs/agent/context.md e docs/agent/decisions.md
+#           Faz .bak dos arquivos que mudarem e lista órfãos em .claude/.
+#           NÃO use --force pra atualizar: ele apaga context.md e decisions.md.
+#
 # Agentes suportados: claude, codex, opencode, antigravity
-# Flags: --dir <path> --agents <lista> --infra/--no-infra --yes --force
+# Flags: --dir <path> --agents <lista> --infra/--no-infra --yes --force --update
 #
 set -euo pipefail
 
@@ -176,6 +184,7 @@ TARGET_DIR=""
 AGENTS_CSV=""
 ASSUME_YES=0
 FORCE=0
+UPDATE=0          # atualiza SÓ o boilerplate; preserva o que é do projeto
 SETUP_INFRA=""    # "" = perguntar; 1 = sim; 0 = não
 SETUP_SERENA=""   # idem
 MEMORY_MODE=""    # "" = perguntar (ou ler config per-máquina); "local" | "vps"
@@ -194,6 +203,7 @@ while [ $# -gt 0 ]; do
     --qdrant-url=*) QDRANT_URL_OPT="${1#*=}"; shift;;
     --yes|-y)      ASSUME_YES=1; shift;;
     --force)       FORCE=1; shift;;
+    --update)      UPDATE=1; shift;;
     -h|--help)     sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "Argumento desconhecido: $1 (use --help)";;
   esac
@@ -330,14 +340,31 @@ else
   info "Memória: local (${QDRANT_URL}) · collection ${COLLECTION}"
 fi
 
-# ---------- copiar core compartilhado (não sobrescreve context.md/decisions.md) ----------
+# ---------- copiar core compartilhado ----------
+# Duas naturezas de arquivo, e elas se comportam DIFERENTE num update:
+#
+#   boilerplate  (AGENTS.md)  — permanente, vem do buildison, não muda por projeto.
+#                               Num --update TEM que ser atualizado, senão o repo antigo
+#                               nunca recebe regra nova (era o bug: copy_keep o congelava).
+#   do projeto   (context.md, decisions.md) — conhecimento que o agente acumulou.
+#                               NUNCA sobrescrever num --update; só --force faz isso.
 copy_keep() { # src dst  (não sobrescreve se já existe, salvo --force)
   local s="$1" d="$2"
   mkdir -p "$(dirname "$d")"
   if [ -e "$d" ] && [ "$FORCE" -eq 0 ]; then warn "mantido (já existe): ${d#$TARGET_DIR/}"; else cp -f "$s" "$d"; ok "${d#$TARGET_DIR/}"; fi
 }
+copy_boiler() { # src dst  (boilerplate: atualiza no --update e no --force; faz .bak)
+  local s="$1" d="$2"
+  mkdir -p "$(dirname "$d")"
+  if [ -e "$d" ] && [ "$UPDATE" -eq 0 ] && [ "$FORCE" -eq 0 ]; then
+    warn "mantido (já existe): ${d#$TARGET_DIR/}"
+  else
+    [ -e "$d" ] && ! cmp -s "$s" "$d" && cp "$d" "$d.bak" 2>/dev/null || true
+    cp -f "$s" "$d"; ok "${d#$TARGET_DIR/}"
+  fi
+}
 info "Instalando core compartilhado..."
-copy_keep "$SRC_DIR/AGENTS.md"                 "$TARGET_DIR/AGENTS.md"
+copy_boiler "$SRC_DIR/AGENTS.md"               "$TARGET_DIR/AGENTS.md"
 copy_keep "$SRC_DIR/docs/agent/context.md"     "$TARGET_DIR/docs/agent/context.md"
 copy_keep "$SRC_DIR/docs/agent/decisions.md"   "$TARGET_DIR/docs/agent/decisions.md"
 if [ -d "$SRC_DIR/.spec-workflow/templates" ]; then
@@ -349,7 +376,29 @@ fi
 # ---------- Claude Code ----------
 if [ "$SEL_CLAUDE" -eq 1 ]; then
   info "Configurando Claude Code..."
-  cp -Rf "$SRC_DIR/.claude" "$TARGET_DIR/.claude"; ok ".claude/"
+  # Destino é o PAI, não a própria pasta: `cp -R src/.claude dst/.claude` com dst/.claude
+  # já existente cria dst/.claude/.claude (aninha em vez de mesclar), e aí o Claude Code
+  # não acha mais agents/skills. Com o pai, mescla corretamente.
+  cp -Rf "$SRC_DIR/.claude" "$TARGET_DIR/"; ok ".claude/"
+  # cp -Rf MESCLA (não sincroniza): agent/skill renomeado ou removido do buildison fica
+  # órfão aqui pra sempre, e o Claude Code carrega os dois. Não deletamos — o .claude/ do
+  # projeto pode ter customização sua (settings.local.json, agents próprios, worktrees) —
+  # mas listamos pra você decidir.
+  if [ "$UPDATE" -eq 1 ]; then
+    ORPHANS=""
+    for sub in agents commands skills; do
+      [ -d "$TARGET_DIR/.claude/$sub" ] || continue
+      for f in "$TARGET_DIR/.claude/$sub"/*.md; do
+        [ -e "$f" ] || continue
+        [ -e "$SRC_DIR/.claude/$sub/$(basename "$f")" ] || ORPHANS="$ORPHANS  .claude/$sub/$(basename "$f")\n"
+      done
+    done
+    if [ -n "$ORPHANS" ]; then
+      warn "Arquivos em .claude/ que não existem mais no buildison (seus, ou resquício de versão antiga):"
+      printf "$ORPHANS"
+      warn "Revise e remova os que forem resquício."
+    fi
+  fi
   cat > "$TARGET_DIR/CLAUDE.md" <<'EOF'
 # Camada Claude Code
 
@@ -389,6 +438,21 @@ Mapeamento (use a coluna da direita):
 > `claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"`.
 EOF
   ok "CLAUDE.md"
+  # Num --update, respeita a collection que já está no .mcp.json: ela pode ter sido
+  # ajustada à mão e não bater com o nome derivado do diretório (COLLECTION).
+  if [ "$UPDATE" -eq 1 ] && [ -f "$TARGET_DIR/.mcp.json" ]; then
+    PREV_COLL="$(python3 -c "
+import json,sys
+try:
+    v=json.load(open('$TARGET_DIR/.mcp.json'))['mcpServers']['qdrant-memory']['env'].get('COLLECTION_NAME','')
+    print(v)
+except Exception: print('')
+" 2>/dev/null)"
+    if [ -n "$PREV_COLL" ] && [ "$PREV_COLL" != "$COLLECTION" ]; then
+      warn "mantendo collection existente: $PREV_COLL (derivada seria $COLLECTION)"
+      COLLECTION="$PREV_COLL"
+    fi
+  fi
   if [ "$MEMORY_MODE" = "vps" ]; then
     QDRANT_ENV_JSON="{ \"QDRANT_URL\": \"${QDRANT_URL}\", \"QDRANT_API_KEY\": \"\${QDRANT_API_KEY}\", \"COLLECTION_NAME\": \"${COLLECTION}\", \"EMBEDDING_MODEL\": \"${EMBED}\" }"
   else
@@ -398,7 +462,7 @@ EOF
 {
   "mcpServers": {
     "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] },
-    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", "."] },
+    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] },
     "qdrant-memory": {
       "command": "uvx",
       "args": ["mcp-server-qdrant"],
@@ -415,12 +479,24 @@ if [ "$SEL_CODEX" -eq 1 ]; then
   info "Configurando Codex..."
   CODEX_CFG="$HOME/.codex/config.toml"
   mkdir -p "$HOME/.codex"
-  MARK_BEGIN="# >>> buildison (${PROJ_NAME}) >>>"
-  MARK_END="# <<< buildison (${PROJ_NAME}) <<<"
-  if [ -f "$CODEX_CFG" ] && grep -qF "$MARK_BEGIN" "$CODEX_CFG"; then
-    warn "Codex: bloco já existe em $CODEX_CFG (pulando). Use --force pra regravar."
-  else
+  # Marcador SEM nome de projeto: o config do Codex é global e os nomes de tabela
+  # ([mcp_servers.serena] etc) são fixos — um bloco por projeto gera tabelas
+  # duplicadas, que é TOML inválido e derruba TODOS os MCPs do Codex. Então o
+  # bloco é único e substituído a cada install (inclusive os legados por-projeto).
+  MARK_BEGIN="# >>> buildison >>>"
+  MARK_END="# <<< buildison <<<"
+  {
     [ -f "$CODEX_CFG" ] && cp "$CODEX_CFG" "$CODEX_CFG.bak.$(date +%s 2>/dev/null || echo bak)" 2>/dev/null || true
+    if [ -f "$CODEX_CFG" ]; then
+      python3 - "$CODEX_CFG" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+# casa tanto "# >>> buildison >>>" quanto o legado "# >>> buildison (proj) >>>"
+s = re.sub(r'\n*# >>> buildison[^\n]*>>>[\s\S]*?# <<< buildison[^\n]*<<<[^\n]*\n?', '\n', s)
+open(p, 'w').write(s.rstrip() + "\n")
+PY
+    fi
     {
       echo ""
       echo "$MARK_BEGIN"
@@ -430,7 +506,7 @@ if [ "$SEL_CODEX" -eq 1 ]; then
       echo ""
       echo "[mcp_servers.serena]"
       echo 'command = "serena"'
-      echo 'args = ["start-mcp-server", "--context", "codex", "--project-from-cwd"]'
+      echo 'args = ["start-mcp-server", "--context", "codex", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"]'
       echo ""
       echo "[mcp_servers.qdrant-memory]"
       echo 'command = "uvx"'
@@ -442,8 +518,8 @@ if [ "$SEL_CODEX" -eq 1 ]; then
       fi
       echo "$MARK_END"
     } >> "$CODEX_CFG"
-    ok "Codex: MCP adicionado em ~/.codex/config.toml"
-  fi
+    ok "Codex: MCP gravado em ~/.codex/config.toml (bloco único)"
+  }
   ok "Codex: AGENTS.md (lido nativamente da raiz do projeto)"
 fi
 
@@ -461,7 +537,7 @@ if [ "$SEL_OPENCODE" -eq 1 ]; then
   "\$schema": "https://opencode.ai/config.json",
   "mcp": {
     "spec-workflow": { "type": "local", "command": ["npx", "-y", "@pimzino/spec-workflow-mcp@latest", "."], "enabled": true },
-    "serena": { "type": "local", "command": ["serena", "start-mcp-server", "--context", "ide", "--project-from-cwd"], "enabled": true },
+    "serena": { "type": "local", "command": ["serena", "start-mcp-server", "--context", "ide", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"], "enabled": true },
     "qdrant-memory": {
       "type": "local",
       "command": ["uvx", "mcp-server-qdrant"],
@@ -488,7 +564,7 @@ fi
 if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
   info "Configurando Antigravity..."
   if [ -d "$SRC_DIR/.agents" ]; then
-    cp -Rf "$SRC_DIR/.agents" "$TARGET_DIR/.agents"; ok ".agents/ (roster + skills)"
+    cp -Rf "$SRC_DIR/.agents" "$TARGET_DIR/"; ok ".agents/ (roster + skills)"   # pai, não a pasta — evita .agents/.agents
   else
     warn ".agents/ não existe na fonte — rode 'node scripts/gen-antigravity.mjs' no repo buildison."
   fi
@@ -516,7 +592,7 @@ if mode == "vps":
 env["COLLECTION_NAME"] = coll
 env["EMBEDDING_MODEL"] = embed
 servers["spec-workflow"] = {"command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", proj]}
-servers["serena"] = {"command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", proj]}
+servers["serena"] = {"command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", proj, "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"]}
 servers["qdrant-memory"] = {"command": "uvx", "args": ["mcp-server-qdrant"], "env": env}
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w") as f:
