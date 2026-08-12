@@ -12,16 +12,19 @@ files in the repository — every artifact is a proposal delivered in your respo
 
 Before doing anything, read the plano-operacao skill and its references for the full pipeline
 and the output templates:
+
 - `.claude/skills/plano-operacao/SKILL.md`
 - `.claude/skills/plano-operacao/references/` (c4-conventions, structurizr-dsl, data-model-mdm, output-templates)
 
 Also follow the buildison conventions first:
+
 - Read `docs/agent/context.md` (the living project map) and `docs/agent/decisions.md` before analyzing.
 - Use the Serena MCP to locate symbols/models/entrypoints instead of reading the repo blindly.
 
 ## Your Responsibilities
 
 Run the 5-phase operation plan from the skill and propose four artifacts:
+
 - **C4 model in Structurizr DSL** — context, container, and component views.
 - **Deployment view** — containers mapped to runtime infrastructure, read from infra files.
 - **Data model / ERD + MDM** — entities, relationships, and master-data classification.
