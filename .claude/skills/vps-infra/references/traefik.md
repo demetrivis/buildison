@@ -17,6 +17,58 @@ dig +short <dominio>
 Tem que devolver o IP da VPS. Se vier vazio ou outro IP, **espere** — subir o Traefik antes só gera falha de
 challenge e consome cota do Let's Encrypt (5 falhas/hora por domínio).
 
+### ⚠️ Cloudflare: comece com a nuvem CINZA
+
+Se o domínio está na Cloudflare, o registro A tem um toggle de proxy. **Deixe cinza (DNS only)** para emitir o
+certificado.
+
+| Estado | O que acontece |
+|---|---|
+| 🔘 **Cinza (DNS only)** | O tráfego vai direto pra VPS. O Traefik emite e serve o cert dele. É o que você quer. |
+| 🟠 **Laranja (Proxied)** | A Cloudflare termina o TLS e serve o **cert dela**. O do Traefik fica invisível pro visitante. |
+
+Como saber em qual está: o `dig +short <dominio>` devolve o **IP da sua VPS** se for cinza, e um IP da
+Cloudflare (`104.x`, `172.67.x`) se for laranja.
+
+Se depois quiser ligar o laranja (DDoS, cache, esconder o IP), **antes** vá em SSL/TLS → Overview e ponha em
+**Full (strict)**. No modo *Flexible* a Cloudflare fala HTTP com a origem enquanto o Traefik redireciona pra
+HTTPS — resultado é loop de redirecionamento infinito, e o sintoma (`ERR_TOO_MANY_REDIRECTS`) não aponta pra
+causa.
+
+---
+
+## Apontar um domínio novo pra um serviço
+
+O fluxo completo, do zero ao HTTPS:
+
+**1.** Crie o registro **A**: `<sub>.<dominio>` → IP da VPS, nuvem **cinza**.
+
+**2.** Confirme que propagou (pode levar de segundos a minutos):
+
+```bash
+dig +short <sub>.<dominio>
+```
+
+**3.** Adicione as labels ao serviço (veja [Expondo um serviço](#expondo-um-serviço) abaixo) e deployе:
+
+```bash
+docker stack deploy -c <arquivo>.yml <stack>
+```
+
+**4.** Se o Traefik já estava rodando, **force a reavaliação** — ele não pede cert pra router novo sozinho:
+
+```bash
+sudo docker service update --force traefik_traefik
+```
+
+**5.** Valide de fora, sem `-k`:
+
+```bash
+echo | openssl s_client -connect <sub>.<dominio>:443 -servername <sub>.<dominio> 2>/dev/null | grep issuer
+```
+
+O passo 4 é o que mais se esquece — e é justamente o que não dá erro.
+
 ## O stack
 
 Crie `traefik-stack.yml` na VPS:
@@ -26,7 +78,10 @@ version: "3.8"
 
 services:
   traefik:
-    image: traefik:v3.4
+    # Pin no MINOR, não no patch: pega correção de segurança sem salto de minor
+    # surpresa. Confira o atual antes de instalar — esta linha envelhece:
+    #   curl -s https://api.github.com/repos/traefik/traefik/releases/latest | grep tag_name
+    image: traefik:v3.7
     command:
       - --api.dashboard=true
       # ⚠️ providers.SWARM — não providers.docker. Em Swarm, o provider `docker`
