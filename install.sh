@@ -399,6 +399,14 @@ if [ "$SEL_CLAUDE" -eq 1 ]; then
       warn "Revise e remova os que forem resquício."
     fi
   fi
+  # ⚠️ O CLAUDE.md tem natureza DUPLA: os @imports são boilerplate, mas o resto é
+  # documentação do projeto que o time escreveu. Regravar cego destrói isso — já
+  # aconteceu: dois repos perderam 485 e 325 linhas de doc (acesso a VPS, banco,
+  # arquitetura) numa execução do installer. Se já existe, NÃO tocamos.
+  if [ -e "$TARGET_DIR/CLAUDE.md" ] && [ "$FORCE" -eq 0 ]; then
+    warn "mantido (já existe): CLAUDE.md — confira se tem os @imports de AGENTS.md e docs/agent/context.md"
+    CLAUDE_MD_SKIPPED=1
+  else
   cat > "$TARGET_DIR/CLAUDE.md" <<'EOF'
 # Camada Claude Code
 
@@ -438,6 +446,7 @@ Mapeamento (use a coluna da direita):
 > `claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"`.
 EOF
   ok "CLAUDE.md"
+  fi
   # Num --update, respeita a collection que já está no .mcp.json: ela pode ter sido
   # ajustada à mão e não bater com o nome derivado do diretório (COLLECTION).
   if [ "$UPDATE" -eq 1 ] && [ -f "$TARGET_DIR/.mcp.json" ]; then
