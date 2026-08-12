@@ -49,10 +49,30 @@ sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
 ### Verificação — obrigatória, e **de fora** da VPS
 
 ```bash
-nc -z -G 5 <IP> 80 && echo "80 aberto" || echo "80 FECHADO"
+nc -v -G 8 -w 8 <IP> 80 </dev/null
 ```
 
-Rode isso da sua máquina, não da VPS. De dentro sempre parece aberto.
+Rode da sua máquina, não da VPS — de dentro sempre parece aberto.
+
+**Leia o modo da falha, não só o sucesso.** As duas camadas falham de jeitos diferentes:
+
+| Resposta | Onde está o bloqueio |
+|---|---|
+| `succeeded!` | Aberto nas duas camadas |
+| Pendura e estoura o timeout (~8s) | **Security List / NSG** — a cloud descarta o pacote em silêncio |
+| `Connection refused` **instantâneo** | O pacote chegou na instância: **iptables** ou nada escutando na porta |
+
+Ou seja: se demora, o problema é no console web do provedor; se recusa na hora, é dentro da máquina.
+
+⚠️ Antes de subir o Traefik, "refused" é ambíguo — pode ser o iptables **ou** simplesmente não haver nada
+escutando. Não importa: as duas se resolvem na instância. Depois do Traefik no ar, "refused" só pode ser
+iptables.
+
+> **A Security List pode já estar aberta e você não saber.** Uma regra ampla como
+> `0.0.0.0/0 TCP 20-65535` já cobre 80 e 443 — nesse caso não há nada a fazer no console.
+> ⚠️ Mas repare no que ela significa: **toda** porta acima de 20 fica alcançável da internet, e a única
+> proteção passa a ser o iptables da instância. Qualquer serviço que você bindar numa porta pública fica
+> exposto. Se for host sensível, troque por regras específicas de 80 e 443.
 
 ---
 
