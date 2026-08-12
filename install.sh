@@ -365,8 +365,13 @@ copy_boiler() { # src dst  (boilerplate: atualiza no --update e no --force; faz 
 }
 info "Instalando core compartilhado..."
 copy_boiler "$SRC_DIR/AGENTS.md"               "$TARGET_DIR/AGENTS.md"
-copy_keep "$SRC_DIR/docs/agent/context.md"     "$TARGET_DIR/docs/agent/context.md"
-copy_keep "$SRC_DIR/docs/agent/decisions.md"   "$TARGET_DIR/docs/agent/decisions.md"
+# Copia dos TEMPLATES, não do context.md/decisions.md do próprio buildison — aqueles
+# descrevem o buildison e vazariam pra todo projeto herdado. (Fallback pros arquivos
+# antigos mantém compatibilidade com clones anteriores à separação.)
+CTX_SRC="$SRC_DIR/docs/agent/templates/context.md";   [ -f "$CTX_SRC" ] || CTX_SRC="$SRC_DIR/docs/agent/context.md"
+DEC_SRC="$SRC_DIR/docs/agent/templates/decisions.md"; [ -f "$DEC_SRC" ] || DEC_SRC="$SRC_DIR/docs/agent/decisions.md"
+copy_keep "$CTX_SRC"   "$TARGET_DIR/docs/agent/context.md"
+copy_keep "$DEC_SRC"   "$TARGET_DIR/docs/agent/decisions.md"
 if [ -d "$SRC_DIR/.spec-workflow/templates" ]; then
   mkdir -p "$TARGET_DIR/.spec-workflow"
   cp -Rf "$SRC_DIR/.spec-workflow/templates" "$TARGET_DIR/.spec-workflow/"
