@@ -19,14 +19,26 @@ Default Security List → Add Ingress Rules.
 | `0.0.0.0/0` | TCP | 80 |
 | `0.0.0.0/0` | TCP | 443 |
 
-**b) iptables da instância** — a imagem Ubuntu da Oracle vem com `REJECT all` no fim da chain INPUT:
+**b) iptables da instância** — a imagem Ubuntu da Oracle vem com `REJECT all` no fim da chain INPUT. As
+regras novas precisam entrar **antes** dele; inseridas depois, nunca são alcançadas.
+
+⚠️ **Não hardcode o número da linha** — a posição do REJECT varia por imagem. Descubra e insira antes:
 
 ```bash
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+POS=$(sudo iptables -L INPUT -n --line-numbers | awk '/REJECT/{print $1; exit}')
+for p in 443 80; do
+  sudo iptables -C INPUT -m state --state NEW -p tcp --dport $p -j ACCEPT 2>/dev/null \
+    || sudo iptables -I INPUT $POS -m state --state NEW -p tcp --dport $p -j ACCEPT
+done
 ```
 
+> O `-C` testa antes de inserir, então rodar de novo não duplica regra. Insira 443 antes de 80 para que
+> fiquem em ordem crescente na chain (cosmético — a ordem entre elas não afeta o resultado).
+
+Confira que ficaram **acima** do REJECT:
+
 ```bash
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+sudo iptables -L INPUT -n --line-numbers
 ```
 
 Persista (senão some no reboot):

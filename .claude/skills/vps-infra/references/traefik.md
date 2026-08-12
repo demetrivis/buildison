@@ -118,15 +118,11 @@ services:
       placement:
         constraints:
           - node.role == manager
-      labels:
-        - traefik.enable=true
-        # catch-all: qualquer coisa que chegue em :80 vai pra :443
-        - traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)
-        - traefik.http.routers.http-catchall.entrypoints=web
-        - traefik.http.routers.http-catchall.middlewares=redirect-https@docker
-        - traefik.http.routers.http-catchall.priority=1
-        - traefik.http.middlewares.redirect-https.redirectscheme.scheme=https
-        - traefik.http.middlewares.redirect-https.redirectscheme.permanent=true
+      # ⚠️ SEM router "http-catchall". As flags --entrypoints.web.http.redirections.*
+      # acima já redirecionam 80 -> 443 no nível do entrypoint; um catchall só
+      # duplica isso e ainda obriga a acertar o namespace do middleware
+      # (com o provider swarm é @swarm, não @docker — errar não dá erro, só
+      # não aplica). Verificado: sem catchall, http:// devolve 301 normalmente.
 
 volumes:
   volume_swarm_certificates:
