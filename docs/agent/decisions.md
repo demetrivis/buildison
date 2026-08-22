@@ -44,24 +44,28 @@ Formato por entrada:
 **Motivo:** a distinção "permanente vs dinâmico" já existia no `AGENTS.md` como conceito, mas o instalador não a implementava. Descartado fazer merge do `CLAUDE.md` (injetar `@imports` preservando o resto): é lógica de merge, mais superfície pra errar, e os `@imports` mudam raramente.
 **Impacto:** atualizar repo antigo agora é `--update`, nunca `--force`. O `--update` faz `.bak` do que muda e lista órfãos em `.claude/` sem deletar. Ao editar o template de contexto, edite `docs/agent/templates/` — o `docs/agent/context.md` da raiz descreve o buildison em si.
 
-## 2026-08-20 — `vps-infra` sai do buildison e passa a viver no infrailson
+## 2026-08-20 — `vps-infra` passa a existir em dois repos, deliberadamente
 
-**Contexto:** o infrailson deixou de ser só o repo de stacks do autor e virou modelo para outros devs
-fazerem infra. Quem clona ele para aprender infraestrutura não deveria precisar instalar o buildison
-junto só para ter a skill de provisionamento.
+**Contexto:** o `infrailson` virou modelo para outros devs fazerem infra. Quem clona ele para aprender
+infraestrutura precisa da skill de provisionamento junto — não deveria ter que instalar o buildison
+só por causa dela.
 
-**Decisão:** **mover**, não copiar. A skill inteira (`SKILL.md` + `bootstrap.md`, `traefik.md`,
-`portainer.md`) saiu de `.claude/skills/` e de `.agents/skills/` daqui.
+**Considerado e recusado:** mover a skill para o infrailson. O argumento era evitar duas cópias que
+derivam. Recusado porque tira a skill de todo projeto que instala o buildison, e provisionar servidor
+é operação legítima de quem tem uma aplicação para publicar.
 
-**Por quê move e não cópia:** as armadilhas dessa skill nascem operando os hosts do infrailson — as
-duas últimas (basicauth mal formado abrindo a rota, e `replicas: 1` sem `start-first`) apareceram numa
-sessão de operação daquelas VPS. É lá que o conhecimento é gerado, então é lá que ele deve crescer.
-Duas cópias garantiriam que uma ficasse velha, e a velha é a que alguém leria.
+**Decisão:** **copiar**, e assumir o custo da sincronização em vez do custo da ausência.
 
-**O que fica:** a `local-infra` continua aqui — ela é da máquina de desenvolvimento, não de servidor.
+**Mitigação, já que o risco é real:** as duas pastas são idênticas hoje. Antes de commitar mudança na
+skill em qualquer um dos repos:
 
-**Impacto:** projeto que instalar o buildison não recebe mais `vps-infra`. É o correto: repo de
-aplicação não provisiona servidor. Reverter é `cp -R` de volta e desfazer as referências.
+```bash
+diff -rq ~/code/devero/buildison/.claude/skills/vps-infra \
+         ~/code/devero/infrailson/.claude/skills/vps-infra
+```
+
+Silêncio = sincronizadas. E o `.agents/` do buildison é gerado — depois de editar a skill aqui, rode
+`node scripts/gen-antigravity.mjs`, senão o espelho do Antigravity fica velho.
 
 ## 2026-08-12 — Skill `vps-infra` derivada de produção, não de teoria
 

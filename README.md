@@ -312,7 +312,7 @@ node scripts/gen-antigravity.mjs
 | `seo-technical` | SEO técnico: sitemaps, meta tags, structured data |
 | `favicon` | Favicon e metadata para Next.js |
 | `local-infra` | Stack global Docker na máquina de dev: Postgres + Redis + Qdrant + tunnels |
-| ~~`vps-infra`~~ | **Movida** para [infrailson](https://github.com/demetrivis/infrailson) — as armadilhas dela nascem operando aqueles hosts, e é lá que ela cresce |
+| `vps-infra` | VPS do zero: Ubuntu, Docker, Swarm, Traefik com HTTPS, Portainer opcional. **Também vive no [infrailson](https://github.com/demetrivis/infrailson) — editou aqui, sincronize lá** |
 | `agent-memory` | Memória vetorial via Qdrant: collections, payload, o que guardar |
 | `spec-workflow` | Planejamento estruturado: requirements → design → tasks |
 | `plano-operacao` | Pipeline read-only de documentação de arquitetura (C4, ERD, ADR) |
@@ -401,7 +401,7 @@ CLAUDE.md              # bridge Claude Code → @AGENTS.md + @docs/agent/context
 │                      # docker, ghaction, portainer, mecontext
 └── skills/            # database, api, infra, logging, golang, nestjs, prisma,
                        # postgrest, cloudflare, seo-technical, favicon,
-                       # local-infra, agent-memory, spec-workflow,
+                       # local-infra, vps-infra, agent-memory, spec-workflow,
                        # plano-operacao
 
 .agents/               # glue p/ Antigravity (gerado de .claude/)

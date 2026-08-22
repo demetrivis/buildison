@@ -58,8 +58,9 @@ meio-aplicadas por semanas: o commit `fceaae7` corrigiu só o template e deixou 
 - `--update` atualiza boilerplate. **`--force` NÃO é modo de atualização** — ele apaga `context.md` e `decisions.md`
 - `.mcp.json` é versionado: segredo só via `${VAR}` do ambiente do shell, nunca em texto plano
 - Doc com IP/host real é **gitignored** (`docs/infra/qdrant-vps-setup.md`); o par versionado é o `-template.md`
-- Skill de infra local: `local-infra` (máquina de dev). A `vps-infra` (servidor remoto) **saiu daqui**
-  em 2026-08-20 e vive no `infrailson` — ver `decisions.md`
+- Skills de infra vêm em par: `local-infra` (máquina de dev) e `vps-infra` (servidor remoto)
+- **`vps-infra` existe em DOIS repos** (aqui e no `infrailson`), de propósito. Editou num, sincronize
+  no outro — `diff -rq` entre as duas pastas antes de commitar
 - Commits explicam **por que**, com o modo de falha concreto quando houver
 
 ## Pontos de atenção / armadilhas
