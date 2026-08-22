@@ -49,7 +49,7 @@ Pré-requisitos na VPS:
 > ⚠️ **Compose puro vs Swarm.** O arquivo abaixo é `docker-compose.yml` (`docker compose up -d`) e usa
 > `--providers.docker`. Se a VPS roda **Docker Swarm** (`docker stack deploy`), esse provider **não enxerga
 > services** — o Traefik sobe e não roteia nada, sem erro. Em Swarm troque por `--providers.swarm` e ponha as
-> labels em `deploy.labels`. A skill `vps-infra` tem o stack de Swarm pronto.
+> labels em `deploy.labels`. A skill `vps-infra` (no repo infrailson) tem o stack de Swarm pronto.
 
 `docker-compose.yml`:
 

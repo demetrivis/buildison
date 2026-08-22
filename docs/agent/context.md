@@ -58,7 +58,8 @@ meio-aplicadas por semanas: o commit `fceaae7` corrigiu só o template e deixou 
 - `--update` atualiza boilerplate. **`--force` NÃO é modo de atualização** — ele apaga `context.md` e `decisions.md`
 - `.mcp.json` é versionado: segredo só via `${VAR}` do ambiente do shell, nunca em texto plano
 - Doc com IP/host real é **gitignored** (`docs/infra/qdrant-vps-setup.md`); o par versionado é o `-template.md`
-- Skills de infra vêm em par: `local-infra` (máquina de dev) e `vps-infra` (servidor remoto)
+- Skill de infra local: `local-infra` (máquina de dev). A `vps-infra` (servidor remoto) **saiu daqui**
+  em 2026-08-20 e vive no `infrailson` — ver `decisions.md`
 - Commits explicam **por que**, com o modo de falha concreto quando houver
 
 ## Pontos de atenção / armadilhas
@@ -82,4 +83,4 @@ Todas já morderam de verdade neste repo:
 - Convenções por camada: `.claude/skills/`
 - Histórico de decisões: [`decisions.md`](decisions.md)
 - Template em branco pros projetos herdados: [`templates/`](templates/)
-- Stacks das VPS (repo separado): `~/code/devero/infra` → `demetrivis/infra` (privado)
+- Stacks das VPS (repo separado): `~/code/devero/infrailson` → `demetrivis/infrailson` (privado)

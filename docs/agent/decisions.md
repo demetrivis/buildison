@@ -44,6 +44,25 @@ Formato por entrada:
 **Motivo:** a distinção "permanente vs dinâmico" já existia no `AGENTS.md` como conceito, mas o instalador não a implementava. Descartado fazer merge do `CLAUDE.md` (injetar `@imports` preservando o resto): é lógica de merge, mais superfície pra errar, e os `@imports` mudam raramente.
 **Impacto:** atualizar repo antigo agora é `--update`, nunca `--force`. O `--update` faz `.bak` do que muda e lista órfãos em `.claude/` sem deletar. Ao editar o template de contexto, edite `docs/agent/templates/` — o `docs/agent/context.md` da raiz descreve o buildison em si.
 
+## 2026-08-20 — `vps-infra` sai do buildison e passa a viver no infrailson
+
+**Contexto:** o infrailson deixou de ser só o repo de stacks do autor e virou modelo para outros devs
+fazerem infra. Quem clona ele para aprender infraestrutura não deveria precisar instalar o buildison
+junto só para ter a skill de provisionamento.
+
+**Decisão:** **mover**, não copiar. A skill inteira (`SKILL.md` + `bootstrap.md`, `traefik.md`,
+`portainer.md`) saiu de `.claude/skills/` e de `.agents/skills/` daqui.
+
+**Por quê move e não cópia:** as armadilhas dessa skill nascem operando os hosts do infrailson — as
+duas últimas (basicauth mal formado abrindo a rota, e `replicas: 1` sem `start-first`) apareceram numa
+sessão de operação daquelas VPS. É lá que o conhecimento é gerado, então é lá que ele deve crescer.
+Duas cópias garantiriam que uma ficasse velha, e a velha é a que alguém leria.
+
+**O que fica:** a `local-infra` continua aqui — ela é da máquina de desenvolvimento, não de servidor.
+
+**Impacto:** projeto que instalar o buildison não recebe mais `vps-infra`. É o correto: repo de
+aplicação não provisiona servidor. Reverter é `cp -R` de volta e desfazer as referências.
+
 ## 2026-08-12 — Skill `vps-infra` derivada de produção, não de teoria
 
 **Contexto:** o `/portainer` gerava o stack da aplicação mas listava "Swarm inicializado, `network_public`, Traefik rodando" como pré-requisito — e nada no repo ensinava a chegar lá. O conhecimento existia só numa VPS de produção e num doc gitignored que descreve o resultado, não o caminho.
