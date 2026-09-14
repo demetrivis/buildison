@@ -12,6 +12,12 @@
 >
 > Em conflito de regra de comportamento, **este arquivo prevalece**.
 
+<!-- bld:if source -->
+> **Nota da fonte (não vai para o projeto):** os blocos `<!-- bld:if X -->` … `<!-- bld:end -->` são filtrados
+> pelo instalador conforme o que foi instalado — `spec`, `serena`, `memory`, `mcp` (algum MCP) e `infra`;
+> `!X` inverte. No projeto instalado sobra só o texto do que existe lá.
+<!-- bld:end -->
+
 ## Sobre este projeto
 
 Este repositório é construído sobre o boilerplate **buildison** (agents, commands, skills em `.claude/`).
@@ -21,6 +27,7 @@ conhecimento vivo do projeto: overview, stack real, comandos, arquitetura e conv
 **Mantenha esse arquivo atualizado** sempre que o stack ou a arquitetura mudarem. Aqui (AGENTS.md) ficam só as
 regras permanentes; lá fica o que muda.
 
+<!-- bld:if infra -->
 ## Infraestrutura local (stack global)
 
 Stack Docker Desktop **global** em `~/local-infra/` — sobe uma vez e atende **todos os projetos da máquina**.
@@ -38,18 +45,6 @@ As credenciais abaixo são **exemplos de dev local** (o stack nunca é exposto a
 - `localhost:6379` (host) / `host.docker.internal:6379` (container) · sem auth
 - Connection string: `redis://localhost:6379/0` — um número de DB por projeto (`/0`, `/1`, ...)
 
-### Qdrant (memória dos agentes — dois modos)
-
-Dois modos, escolha **uma vez por máquina** no instalador (`--memory=local|vps`,
-salvo em `~/.buildison/vps.env`):
-
-- **Local** (default): REST `http://localhost:6333` · gRPC `6334` · sem auth · dashboard em `http://localhost:6333/dashboard`. Simples; memória só nesta máquina.
-- **VPS**: `https://qdrant.<seu-dominio>` com header `api-key`. Memória **segue você entre máquinas**. Setup em `docs/infra/qdrant-vps-template.md`.
-
-Em ambos: 1 instância Qdrant, **uma collection por projeto** (ex.: `agent_<projeto>`).
-Acesso via MCP `qdrant-memory`; convenções na skill `agent-memory`. Sem replicação automática
-entre local e VPS — escolha uma como fonte de verdade.
-
 ### Tunnels (ngrok + cloudflared)
 
 - **ngrok** — URL pública efêmera, só com authtoken. Teste rápido. Dashboard em `:4040`.
@@ -65,34 +60,66 @@ docker compose down       # derruba (mantém volumes)
 ```
 
 Para montar o `~/local-infra/docker-compose.yml` do zero, use a skill `local-infra`.
+<!-- bld:end -->
 
+<!-- bld:if memory -->
+## Memória dos agentes (Qdrant)
+
+Dois modos, escolha **uma vez por máquina** no instalador (`--memory=local|vps`,
+salvo em `~/.buildison/vps.env`):
+
+- **Local** (default): REST `http://localhost:6333` (sobe com o `~/local-infra`) · gRPC `6334` · sem auth · dashboard em `http://localhost:6333/dashboard`. Simples; memória só nesta máquina.
+- **VPS**: `https://qdrant.<seu-dominio>` com header `api-key`. Memória **segue você entre máquinas**. Setup em `docs/infra/qdrant-vps-template.md`.
+
+Em ambos: 1 instância Qdrant, **uma collection por projeto** (ex.: `agent_<projeto>`).
+Acesso via MCP `qdrant-memory`; convenções na skill `agent-memory`. Sem replicação automática
+entre local e VPS — escolha uma como fonte de verdade.
+<!-- bld:end -->
+
+<!-- bld:if mcp -->
 ## Toolbox de agentes (MCP)
 
-Config dos MCPs do projeto: [`.mcp.json`](.mcp.json).
+Config dos MCPs: [`.mcp.json`](.mcp.json) (Claude Code) · `~/.codex/config.toml` (Codex) · `opencode.json` (OpenCode).
 
-| Peça | Papel | Acesso |
-| :--- | :--- | :--- |
-| **SpecWorkflow** | Planejamento: requirements → design → tasks | MCP `spec-workflow` · skill `spec-workflow` |
-| **Serena** | Navegação semântica do codebase | MCP `serena` |
-| **Context7** | Docs atualizadas de libs/APIs | MCP `context7` |
-| **Qdrant** | Memória vetorial persistente (collection por projeto) | MCP `qdrant-memory` · skill `agent-memory` |
-
-**Pré-requisitos** (uma vez por máquina):
-
-- **Serena**: `uv tool install -p 3.13 serena-agent && serena init` (o `.mcp.json` chama `serena start-mcp-server`).
-- **Qdrant**: subir via `local-infra`; o MCP `qdrant-memory` roda via `uvx mcp-server-qdrant`.
-- **SpecWorkflow**: nada a instalar — roda via `npx` (stdio). Templates em `.spec-workflow/templates/`.
-- **Por projeto**: ajuste `COLLECTION_NAME` no `.mcp.json` para `agent_<projeto>`.
+<!-- bld:if spec -->
+- **SpecWorkflow** — planejamento: requirements → design → tasks. MCP `spec-workflow` · skill `spec-workflow`.
+  Nada a instalar (roda via `npx`, stdio). Templates em `.spec-workflow/templates/`.
+<!-- bld:end -->
+<!-- bld:if serena -->
+- **Serena** — navegação semântica do codebase. MCP `serena`.
+  Pré-requisito (uma vez por máquina): `uv tool install -p 3.13 serena-agent && serena init`.
+<!-- bld:end -->
+<!-- bld:if memory -->
+- **Qdrant** — memória vetorial persistente, uma collection por projeto. MCP `qdrant-memory` · skill `agent-memory`.
+  Roda via `uvx mcp-server-qdrant`; o Qdrant precisa estar no ar (local-infra ou VPS). Por projeto: `COLLECTION_NAME=agent_<projeto>`.
+<!-- bld:end -->
+- **Context7** — docs atualizadas de libs/APIs. MCP `context7` (se estiver configurado no seu agente).
+<!-- bld:end -->
 
 ## Agent workflow
 
-1. **Leia este arquivo e o `docs/agent/context.md`** antes de qualquer implementação.
-2. Consulte `docs/agent/decisions.md` para decisões anteriores antes de mudar arquitetura.
-3. Para features **não triviais**, use **SpecWorkflow** para gerar requirements → design → tasks antes de codar.
-4. Use **Serena** para localizar símbolos/referências antes de editar módulos desconhecidos — não leia o repo inteiro às cegas.
-5. Use **Context7** para documentação de libs/APIs externas — não confie em memória de versões antigas.
-6. Use **Qdrant** (`qdrant-memory`) só para recuperar/gravar **contexto durável** do projeto. Ver `agent-memory` skill.
-7. Ao final: atualize `docs/agent/context.md` se o stack/arquitetura mudou, registre decisões em `docs/agent/decisions.md` e salve memória durável no Qdrant.
+- **Leia este arquivo e o `docs/agent/context.md`** antes de qualquer implementação.
+- Consulte `docs/agent/decisions.md` para decisões anteriores antes de mudar arquitetura.
+<!-- bld:if spec -->
+- Para features **não triviais**, use **SpecWorkflow** para gerar requirements → design → tasks antes de codar.
+<!-- bld:end -->
+<!-- bld:if !spec -->
+- Para features **não triviais**, escreva primeiro um plano curto (requisitos → design → tarefas) e só então code.
+<!-- bld:end -->
+<!-- bld:if serena -->
+- Use **Serena** para localizar símbolos/referências antes de editar módulos desconhecidos — não leia o repo inteiro às cegas.
+<!-- bld:end -->
+<!-- bld:if !serena -->
+- Localize símbolos e referências (busca no código) antes de editar módulos desconhecidos — não leia o repo inteiro às cegas.
+<!-- bld:end -->
+- Use documentação atualizada (**Context7**, se disponível) para libs/APIs externas — não confie em memória de versões antigas.
+<!-- bld:if memory -->
+- Use **Qdrant** (`qdrant-memory`) só para recuperar/gravar **contexto durável** do projeto. Ver skill `agent-memory`.
+<!-- bld:end -->
+- Ao final: atualize `docs/agent/context.md` se o stack/arquitetura mudou e registre decisões em `docs/agent/decisions.md`.
+<!-- bld:if memory -->
+  Salve também a memória durável no Qdrant.
+<!-- bld:end -->
 
 ## Coding rules
 
@@ -104,9 +131,14 @@ Config dos MCPs do projeto: [`.mcp.json`](.mcp.json).
 
 ## Memory policy
 
+<!-- bld:if memory -->
 Detalhes operacionais na skill `agent-memory`. Resumo:
 
 **Guardar** (memória durável no Qdrant ou em `docs/agent/decisions.md`):
+<!-- bld:end -->
+<!-- bld:if !memory -->
+**Guardar** (em `docs/agent/decisions.md`; o que for stack/arquitetura vai no `docs/agent/context.md`):
+<!-- bld:end -->
 - decisões de arquitetura e o motivo
 - convenções do projeto
 - bugs recorrentes e suas correções

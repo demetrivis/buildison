@@ -10,6 +10,7 @@ Sem duplicar conteúdo: `AGENTS.md` + `.claude/` + `docs/agent/` são a fonte; c
 ## Índice
 
 - [Instalar do zero](#instalar-do-zero)
+- [Instalar leve ou sob medida](#instalar-leve-ou-sob-medida) — só os arquivos, sem MCP/infra/Qdrant
 - [Atualizar um projeto que já tem buildison](#atualizar-um-projeto-que-já-tem-buildison)
 - [A infra](#a-infra) — local-infra, memória local vs VPS
 - [O que cada agente recebe](#o-que-cada-agente-recebe)
@@ -81,6 +82,57 @@ Com flags:
 
 ---
 
+## Instalar leve ou sob medida
+
+Por padrão o buildison instala tudo (`full`). Se você só quer os **arquivos** — agents, skills e commands — sem
+MCP, sem `local-infra` e sem banco vetorial, escolha um preset:
+
+| Preset | O que vem | Precisa na máquina |
+|---|---|---|
+| `files` | `AGENTS.md`, `docs/agent/`, `.claude/agents`, `.claude/commands`, `.claude/skills` (e `.agents/` no Antigravity) | nada |
+| `lite` | `files` + MCP `spec-workflow` + `.spec-workflow/templates/` | Node (`npx`) |
+| `full` _(default)_ | `lite` + MCP `serena` + memória Qdrant + `.claude/settings.json` | `uv`/Serena · Qdrant (local-infra ou VPS) |
+| `custom` | pergunta MCPs, partes e itens | depende |
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files
+```
+
+No modo interativo o instalador pergunta o preset logo depois dos agentes.
+
+### Sob medida
+
+As flags partem do preset e sobrescrevem só o que você passar:
+
+| bash | PowerShell | Valores |
+|---|---|---|
+| `--mcp` | `-Mcp` | `spec-workflow`, `serena`, `memory` ou `none` |
+| `--parts` | `-Parts` | `agents`, `commands`, `skills`, `settings` |
+| `--skills` | `-Skills` | só estas skills |
+| `--subagents` | `-Subagents` | só estes agents |
+| `--commands` | `-Commands` | só estes commands |
+| `--list` | `-List` | mostra tudo que dá pra escolher |
+
+```bash
+bash install.sh --dir . --agents claude,codex --mcp spec-workflow --skills golang,nestjs,database --commands commit,pr --yes
+```
+
+O que depende de uma peça sai sozinho quando ela não é instalada: a skill `agent-memory` só vem com `memory`, a
+skill `spec-workflow` só com o MCP `spec-workflow`, a `local-infra` só com a infra, e o agent `suporte` só com algum
+MCP. Pedir o item pelo nome força a instalação.
+
+O `AGENTS.md` e os templates de `docs/agent/` também são filtrados: as seções de infra, Qdrant e Serena só aparecem
+no projeto se a peça foi instalada (blocos `<!-- bld:if ... -->` na fonte).
+
+A escolha fica salva em `.buildison`, na raiz do projeto. As próximas execuções e o `--update` reaproveitam esse
+arquivo — passe outro `--preset` para mudar.
+
+---
+
 ## Atualizar um projeto que já tem buildison
 
 Entre na pasta do projeto e rode:
@@ -103,12 +155,12 @@ projeto, nunca sobrescrito):
 | Atualiza | Preserva |
 |---|---|
 | `AGENTS.md` | `docs/agent/context.md` |
-| `CLAUDE.md` | `docs/agent/decisions.md` |
-| `.claude/`, `.agents/` | `COLLECTION_NAME` já configurada no `.mcp.json` |
-| `.spec-workflow/templates/` | |
+| `.claude/`, `.agents/` | `docs/agent/decisions.md` |
+| `.spec-workflow/templates/` | `CLAUDE.md` (se já existe) |
+| `.mcp.json` | `COLLECTION_NAME` já configurada no `.mcp.json` |
 
 Faz `.bak` de tudo que muda e lista arquivos em `.claude/` que não existem mais na fonte — sem deletar, porque
-o seu `.claude/` pode ter agents e skills próprios.
+o seu `.claude/` pode ter agents e skills próprios. Respeita o preset salvo em `.buildison`.
 
 > ### ⚠️ Não use `--force` para atualizar
 >
@@ -234,10 +286,16 @@ do diretório; o `--update` respeita o que já estiver configurado.
 <summary>Particularidades do Codex e do Antigravity</summary>
 
 **Codex** — o `~/.codex/config.toml` é **global** e os nomes de tabela são fixos (`[mcp_servers.serena]` etc).
-Por isso o buildison mantém **um bloco único**, substituído a cada install: um bloco por projeto declararia as
-mesmas tabelas várias vezes, o que é TOML inválido e derruba **todos** os MCPs do Codex silenciosamente. A
-consequência prática: `serena` e `spec-workflow` funcionam em qualquer projeto (resolvem pelo CWD), mas a
-`COLLECTION_NAME` do Qdrant no global aponta para um projeto só — o último instalado.
+Uma tabela declarada duas vezes é TOML inválido, e aí o Codex descarta a config **inteira** — inclusive
+`[windows]`, o que deixa o app em loop ou abrindo várias instâncias. Por isso os dois instaladores:
+
+- mantêm **um bloco único** `# >>> buildison >>>` e removem os blocos legados por projeto;
+- **não repetem** uma tabela que você já declarou fora do bloco;
+- **não tiram** do bloco o que um install anterior pôs e o atual não pediu — um projeto `lite` não desliga a memória de outro;
+- **validam** o arquivo final (tabelas duplicadas + `tomllib` quando há Python 3.11+) e, se ele ficaria inválido, não gravam nada.
+
+O preset `files` não toca no `config.toml`. `serena` e `spec-workflow` funcionam em qualquer projeto (resolvem pelo
+CWD), mas a `COLLECTION_NAME` do Qdrant no global aponta para um projeto só — o último que instalou memória.
 
 **Antigravity** lê o `AGENTS.md` da raiz nativamente. O que ele reconhece por arquivo é **skill** e **workflow**
 — não existe "agente custom" registrável (os subagentes Browser/Terminal são orquestrados pela IDE). Por isso o
@@ -480,8 +538,9 @@ docker ps --filter name=qdrant
 ## Requisitos
 
 - [Claude Code CLI](https://claude.ai/code) v2.1.32+ (ou Codex / OpenCode / Antigravity)
-- `git`, `bash` e `python3`
-- `uv` para o Serena · Docker Desktop para o `local-infra`
+- `git` e `bash` (ou PowerShell no Windows)
+- `python3` 3.11+ é opcional: valida o `config.toml` do Codex a fundo e grava o MCP do Antigravity (bash)
+- Só quando instalados: `uv` para o Serena · Qdrant (Docker Desktop com o `local-infra`, ou VPS) para a memória
 
 ## Licença
 
