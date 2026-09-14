@@ -4,8 +4,13 @@
 > que é permanente) que vive o conhecimento específico deste projeto: o quê é, qual o stack real, como rodar,
 > como está organizado. Atualize sempre que o stack ou a arquitetura mudarem.
 >
+<!-- bld:if memory -->
 > Mantenha curto e verdadeiro. Decisões formais vão para [`decisions.md`](decisions.md); memória de baixo
 > atrito vai para o Qdrant (skill `agent-memory`).
+<!-- bld:end -->
+<!-- bld:if !memory -->
+> Mantenha curto e verdadeiro. Decisões formais vão para [`decisions.md`](decisions.md).
+<!-- bld:end -->
 
 ## Visão do projeto
 

@@ -1,7 +1,10 @@
 # docs/agent/decisions.md
 
 > Log de decisões técnicas relevantes (ADR enxuto). Versionado no Git — é a fonte de verdade
-> para "por que está assim". Memória durável de baixo atrito vai para o Qdrant (skill `agent-memory`).
+> para "por que está assim".
+<!-- bld:if memory -->
+> Memória durável de baixo atrito vai para o Qdrant (skill `agent-memory`).
+<!-- bld:end -->
 
 Formato por entrada:
 
