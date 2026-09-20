@@ -273,10 +273,19 @@ function Update-CodexMcp {
   if ($hasMemory) { $want += 'qdrant-memory' }
   # O config e de TODOS os projetos: o que um install anterior pos no bloco e este nao pediu
   # continua la (um projeto "lite" nao desliga a memoria que outro projeto usa).
+  # Varre o bloco INTEIRO, nao so o trio do buildison: quem edita o ~/.codex/config.toml a mao
+  # acaba pondo MCP proprio dentro dos marcadores, e regravar cego apagava isso em silencio.
   $keep = @()
-  foreach ($n in 'spec-workflow', 'serena', 'qdrant-memory') {
-    if ($want -contains $n) { continue }
-    if (Get-OldCodexTable $oldBlock $n) { $keep += $n }
+  $seen = @{}
+  foreach ($l in $oldBlock) {
+    $t = ($l -replace '\s*#.*$', '') -replace '[\s"]', ''
+    if ($t -match '^\[mcp_servers\.([^.\]]+)\]$') {
+      $nm = $Matches[1]
+      if ($seen.ContainsKey($nm)) { continue }
+      $seen[$nm] = $true
+      if ($want -contains $nm) { continue }
+      $keep += $nm
+    }
   }
   $pending = @()
   foreach ($n in @($want + $keep)) {
@@ -284,7 +293,7 @@ function Update-CodexMcp {
       Warn "Codex: [mcp_servers.$n] ja existe fora do bloco do buildison - mantido como esta (nao duplico)"
     } else { $pending += $n }
   }
-  if ($keep.Count) { Info "Codex: mantido do install anterior (outros projetos podem usar): $($keep -join ', ')" }
+  if ($keep.Count) { Info "Codex: mantido do bloco anterior (outro projeto, ou MCP seu): $($keep -join ', ')" }
   $new = $base
   if ($pending.Count) {
     $tables = foreach ($n in $pending) { if ($want -contains $n) { Get-CodexTable $n } else { Get-OldCodexTable $oldBlock $n } }

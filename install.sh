@@ -789,6 +789,18 @@ toml_is_valid() {
   return 1
 }
 # tabela como estava no bloco anterior do buildison (inclui subtabelas [mcp_servers.X.env])
+codex_old_names() { # nomes de [mcp_servers.X] achados no bloco antigo (só tabela raiz, sem sub-tabela)
+  [ -s "$WORK/codex-oldblock.toml" ] || return 0
+  awk '
+    /^[[:space:]]*\[[[:space:]]*mcp_servers[[:space:]]*\./ {
+      line = $0; sub(/[[:space:]]*#.*$/, "", line); gsub(/[[:space:]"]/, "", line)
+      if (line !~ /^\[mcp_servers\.[^.]+\]$/) next
+      n = line; sub(/^\[mcp_servers\./, "", n); sub(/\]$/, "", n)
+      if (!(n in seen)) { seen[n] = 1; print n }
+    }
+  ' "$WORK/codex-oldblock.toml"
+}
+
 codex_old_table() {
   [ -s "$WORK/codex-oldblock.toml" ] || return 0
   awk -v h="[mcp_servers.$1]" '
@@ -823,9 +835,11 @@ codex_write_mcp() {
   if [ "$HAS_MEMORY" -eq 1 ]; then want="$want qdrant-memory"; fi
   # O config é de TODOS os projetos: o que um install anterior pôs no bloco e este não pediu
   # continua lá (um projeto "lite" não desliga a memória que outro projeto usa).
-  for name in spec-workflow serena qdrant-memory; do
+  # Varre o bloco INTEIRO, não só o trio do buildison: quem edita o ~/.codex/config.toml à mão
+  # acaba pondo MCP próprio dentro dos marcadores, e regravar cego apagava isso em silêncio.
+  for name in $(codex_old_names); do
     case " $want " in *" $name "*) continue;; esac
-    if [ -n "$(codex_old_table "$name")" ]; then keep="$keep $name"; fi
+    keep="$keep $name"
   done
   for name in $want $keep; do
     if grep -qE "^[[:space:]]*\[[[:space:]]*mcp_servers[[:space:]]*\.[[:space:]]*\"?${name}\"?[[:space:]]*\][[:space:]]*(#.*)?$" "$tmp"; then
@@ -834,7 +848,7 @@ codex_write_mcp() {
       pending="$pending $name"
     fi
   done
-  if [ -n "$keep" ]; then info "Codex: mantido do install anterior (outros projetos podem usar):$keep"; fi
+  if [ -n "$keep" ]; then info "Codex: mantido do bloco anterior (outro projeto, ou MCP seu):$keep"; fi
   if [ -n "$pending" ]; then
     {
       if [ -s "$tmp" ]; then echo ""; fi
