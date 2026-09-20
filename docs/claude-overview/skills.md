@@ -100,6 +100,12 @@ Favicon e metadata.
 **References:**
 - `nextjs-metadata.md` — Metadata e favicons no Next.js
 
+### qdrant-setup/
+
+Instala a memória vetorial Qdrant **sob demanda** (command `/qdrant`): sobe local ou aponta pra VPS,
+registra o MCP `qdrant-memory` nos agentes do projeto, cria a collection e valida. Também troca
+local↔vps e remove. Absorveu o antigo `switch.sh`. O instalador **não** configura Qdrant.
+
 ### agent-memory/
 
 Memória vetorial persistente do agente via Qdrant (MCP `qdrant-memory`): estratégia de collections por

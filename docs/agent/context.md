@@ -15,8 +15,9 @@ Distribuído por três caminhos: `curl | bash`, `npx github:demetrivis/buildison
 
 ## Stack
 
-- **Bash** — `install.sh` (583+ linhas, o coração), `switch.sh`
-- **PowerShell** — `install.ps1`, `switch.ps1` (espelhos nativos pro Windows)
+- **Bash** — `install.sh` (o coração). O `switch.sh`/`switch.ps1` **não existe mais**: trocar o modo
+  de memória virou trabalho da skill `qdrant-setup`
+- **PowerShell** — `install.ps1` (espelho nativo pro Windows)
 - **Node** — `bin/buildison.mjs` (wrapper npx), `scripts/gen-antigravity.mjs` (gera `.agents/` de `.claude/`)
 - Sem build e sem testes automatizados — validação é rodar o instalador contra um diretório de teste
 
@@ -46,12 +47,16 @@ Duas naturezas de arquivo, e **essa distinção governa o instalador inteiro**:
 | Natureza | Arquivos | No `--update` |
 | :-- | :-- | :-- |
 | **Boilerplate** | `AGENTS.md`, `.claude/`, `.agents/`, `.spec-workflow/templates/` | sobrescreve |
-| **Do projeto** | `docs/agent/context.md`, `docs/agent/decisions.md`, `CLAUDE.md`, `COLLECTION_NAME` do `.mcp.json` | preserva |
+| **Do projeto** | `docs/agent/context.md`, `docs/agent/decisions.md`, `CLAUDE.md` | preserva |
 
 O `install.sh` emite config pros 4 agentes em **pontos distintos** do arquivo (Claude `.mcp.json`, Codex
 `~/.codex/config.toml`, OpenCode `opencode.json`, Antigravity `~/.gemini/.../mcp_config.json`).
 **Mexeu em como um agente é configurado, mexa nos quatro** — foi assim que as flags do Serena ficaram
 meio-aplicadas por semanas: o commit `fceaae7` corrigiu só o template e deixou o instalador intacto.
+O mesmo vale pro `scripts/qdrant-mcp.py` da skill `qdrant-setup`: ele escreve nos mesmos 4 pontos.
+
+**O instalador não configura Qdrant.** Memória vetorial é opt-in pela skill `qdrant-setup` (command
+`/qdrant`). O installer só emite `spec-workflow` e `serena`.
 
 ## Convenções específicas
 
@@ -59,6 +64,8 @@ meio-aplicadas por semanas: o commit `fceaae7` corrigiu só o template e deixou 
 - `.mcp.json` é versionado: segredo só via `${VAR}` do ambiente do shell, nunca em texto plano
 - Doc com IP/host real é **gitignored** (`docs/infra/qdrant-vps-setup.md`); o par versionado é o `-template.md`
 - Skills de infra vêm em par: `local-infra` (máquina de dev) e `vps-infra` (servidor remoto)
+- Memória vetorial vem em par também: `qdrant-setup` (**setup**: instalar, trocar modo, remover) e
+  `agent-memory` (**uso**: o que guardar, como nomear collection). Não misture os dois papéis
 - **`vps-infra` existe em DOIS repos** (aqui e no `infrailson`), de propósito. Editou num, sincronize
   no outro — `diff -rq` entre as duas pastas antes de commitar
 - Commits explicam **por que**, com o modo de falha concreto quando houver
@@ -77,6 +84,10 @@ Todas já morderam de verdade neste repo:
 - **Python do sistema é 3.9** — sem `tomllib`. Validar TOML com `uvx --python 3.12 python -c "import tomllib..."`.
 - **`glob("**")` do Python não desce em diretório oculto** — `.claude/worktrees/*` passa batido em varredura.
 - **Traefik não pede cert pra router criado depois que subiu** — exige `service update --force`, e não loga erro.
+- **O bloco `# >>> buildison >>>` do Codex guarda MCP que não é do buildison** — quem edita o
+  `~/.codex/config.toml` à mão põe servidor próprio lá dentro. Regravar só o trio conhecido apagava
+  isso em silêncio (aconteceu com o `computer-use`). O `keep` varre o bloco inteiro; ao mexer nele,
+  mantenha essa varredura nos **dois** instaladores.
 
 ## Onde encontrar o quê
 

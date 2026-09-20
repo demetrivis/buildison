@@ -2,8 +2,9 @@
 // Wrapper npx do buildison — delega para os scripts bash.
 // Subcomandos:
 //   install [opts]   → install.sh   (instala a toolbox; default se nenhum subcomando)
-//   switch  [opts]   → switch.sh    (troca .mcp.json do projeto atual entre local/vps)
 //   --help / -h      → ajuda do install.sh
+// O antigo 'switch' (trocar a memória entre local/vps) saiu: virou a skill 'qdrant-setup'
+// (command /qdrant), que faz o setup e a troca de modo pelo próprio agente.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -12,7 +13,6 @@ import { existsSync } from 'node:fs';
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const scripts = {
   install: join(pkgRoot, 'install.sh'),
-  switch:  join(pkgRoot, 'switch.sh'),
 };
 
 const args = process.argv.slice(2);

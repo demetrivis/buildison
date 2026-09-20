@@ -6,24 +6,24 @@
 #   ./install.sh                          # interativo, instala no diretório atual
 #   ./install.sh --dir ~/code/meu-projeto # escolhe o destino
 #   ./install.sh --agents claude,codex,opencode,antigravity --yes
-#   ./install.sh --preset files           # SÓ arquivos (agents/skills/commands) — sem MCP, infra ou Qdrant
+#   ./install.sh --preset files           # SÓ arquivos (agents/skills/commands) — sem MCP e sem infra
 #   ./install.sh --preset lite            # arquivos + MCP spec-workflow
-#   ./install.sh --preset full            # + serena + memória Qdrant + .claude/settings.json (default)
+#   ./install.sh --preset full            # + serena + .claude/settings.json (default)
 #   ./install.sh --list                   # presets, MCPs, agents, skills e commands disponíveis
 #   ./install.sh --update                 # ATUALIZA repo que já tem buildison (ver abaixo)
 #   curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files
 #
 # Sob medida (partem do preset e sobrescrevem só o que você passar):
-#   --mcp <lista|none>    spec-workflow, serena, memory
+#   --mcp <lista|none>    spec-workflow, serena
 #   --parts <lista>       agents, commands, skills, settings (.claude/settings.json: permissões + plugins)
 #   --skills <lista>      só estas skills      ─┐ default: todos, menos os que dependem de uma peça
-#   --subagents <lista>   só estes agents       │ que não foi instalada (ex.: skill agent-memory
-#   --commands <lista>    só estes commands    ─┘ só vem com --mcp memory). Pedir pelo nome força.
+#   --subagents <lista>   só estes agents       │ que não foi instalada (ex.: skill spec-workflow
+#   --commands <lista>    só estes commands    ─┘ só vem com --mcp spec-workflow). Pedir pelo nome força.
 #   A escolha fica em .buildison na raiz do projeto e é reaproveitada nas próximas execuções.
 #
 # --update  atualiza SÓ o boilerplate e preserva o que é do projeto:
 #             atualiza  AGENTS.md, .claude/, .agents/, .spec-workflow/templates/,
-#                       .mcp.json (mantendo a COLLECTION_NAME já configurada)
+#                       .mcp.json
 #             preserva  CLAUDE.md, docs/agent/context.md e docs/agent/decisions.md
 #           Faz .bak dos arquivos que mudarem e lista órfãos em .claude/.
 #           NÃO use --force pra atualizar: ele apaga context.md e decisions.md.
@@ -31,7 +31,10 @@
 # Agentes suportados: claude, codex, opencode, antigravity
 # Flags: --dir <path> --agents <lista> --preset files|lite|full|custom --mcp --parts --skills
 #        --subagents --commands --list --infra/--no-infra --serena/--no-serena
-#        --memory local|vps --qdrant-url <url> --yes --force --update
+#        --yes --force --update
+#
+# Memória vetorial (Qdrant) NÃO é mais instalada aqui: virou a skill 'qdrant-setup'
+# (+ command /qdrant). Peça ao agente "configura a memória" depois de instalar.
 #
 set -euo pipefail
 
@@ -217,8 +220,6 @@ UPDATE=0          # atualiza SÓ o boilerplate; preserva o que é do projeto
 LIST=0
 SETUP_INFRA=""    # "" = perguntar; 1 = sim; 0 = não
 SETUP_SERENA=""   # idem
-MEMORY_MODE=""    # "" = perguntar (ou ler config per-máquina); "local" | "vps"
-QDRANT_URL_OPT="" # URL custom (modo vps); default lê de ~/.buildison/vps.env ou pergunta
 # o que instalar — *_SET=1 quando veio de flag (ou do .buildison do projeto)
 PRESET="";        PRESET_SET=0; ASK_CUSTOM=0
 MCP_CSV="";       MCP_SET=0
@@ -248,10 +249,8 @@ while [ $# -gt 0 ]; do
     --no-infra)     SETUP_INFRA=0; shift;;
     --serena)       SETUP_SERENA=1; shift;;
     --no-serena)    SETUP_SERENA=0; shift;;
-    --memory)       MEMORY_MODE="${2:-}"; shift 2;;
-    --memory=*)     MEMORY_MODE="${1#*=}"; shift;;
-    --qdrant-url)   QDRANT_URL_OPT="${2:-}"; shift 2;;
-    --qdrant-url=*) QDRANT_URL_OPT="${1#*=}"; shift;;
+    --memory|--memory=*|--qdrant-url|--qdrant-url=*)
+      die "--memory/--qdrant-url saíram do instalador. A memória Qdrant virou a skill 'qdrant-setup' (command /qdrant): instale normalmente e depois peça ao agente pra configurar.";;
     --yes|-y)       ASSUME_YES=1; shift;;
     --force)        FORCE=1; shift;;
     --update)       UPDATE=1; shift;;
@@ -259,33 +258,8 @@ while [ $# -gt 0 ]; do
     *) die "Argumento desconhecido: $1 (use --help)";;
   esac
 done
-case "$MEMORY_MODE" in ""|local|vps) ;; *) die "--memory deve ser 'local' ou 'vps' (recebido: $MEMORY_MODE)";; esac
 case "$PRESET" in ""|files|lite|full|custom) ;; *) die "--preset deve ser files, lite, full ou custom (recebido: $PRESET)";; esac
 [ "$PRESET" = "custom" ] && ASK_CUSTOM=1
-
-# config per-máquina (~/.buildison/vps.env): escolha uma vez, vale pra todos os projetos
-BLD_CFG_DIR="$HOME/.buildison"
-BLD_CFG="$BLD_CFG_DIR/vps.env"
-load_machine_cfg() {
-  if [ -f "$BLD_CFG" ]; then
-    # shellcheck disable=SC1090
-    . "$BLD_CFG"
-    [ -z "$MEMORY_MODE"    ] && [ -n "${BUILDISON_MEMORY_MODE:-}" ] && MEMORY_MODE="$BUILDISON_MEMORY_MODE"
-    [ -z "$QDRANT_URL_OPT" ] && [ -n "${BUILDISON_QDRANT_URL:-}"  ] && QDRANT_URL_OPT="$BUILDISON_QDRANT_URL"
-  fi
-  return 0
-}
-save_machine_cfg() {
-  mkdir -p "$BLD_CFG_DIR"
-  cat > "$BLD_CFG" <<EOF
-# Config per-máquina do buildison — escolha uma vez, vale pra novos projetos desta máquina.
-# (Apague esse arquivo pra ser perguntado de novo.)
-BUILDISON_MEMORY_MODE=$MEMORY_MODE
-BUILDISON_QDRANT_URL=${QDRANT_URL_OPT}
-EOF
-  ok "Config per-máquina salva em $BLD_CFG"
-}
-load_machine_cfg
 
 # ---------- localizar a fonte (repo clonado ou clonar em temp p/ curl|bash) ----------
 # Marcadores ÚNICOS do repo fonte (install.sh + bin/buildison.mjs) — NÃO usar AGENTS.md/.claude
@@ -316,7 +290,6 @@ item_names() { # part → nomes disponíveis na fonte, separados por espaço
 # a menos que você peça o item pelo nome (--skills agent-memory força).
 item_dep() {
   case "$1/$2" in
-    skills/agent-memory)  echo memory;;
     skills/spec-workflow) echo spec;;
     skills/local-infra)   echo infra;;
     agents/suporte)       echo mcp;;
@@ -326,15 +299,14 @@ item_dep() {
 
 if [ "$LIST" -eq 1 ]; then
   printf "${c_bold}Presets${c_reset} (--preset)\n"
-  echo "  files   só arquivos — AGENTS.md, docs/agent/, agents, commands, skills. Sem MCP, sem infra, sem Qdrant."
+  echo "  files   só arquivos — AGENTS.md, docs/agent/, agents, commands, skills. Sem MCP e sem infra."
   echo "  lite    files + MCP spec-workflow (planejamento). Nada pra instalar na máquina."
-  echo "  full    lite + serena + memória Qdrant + .claude/settings.json  (default)"
+  echo "  full    lite + serena + .claude/settings.json  (default)"
   echo "  custom  pergunta MCPs, partes e quais itens"
   echo ""
   printf "${c_bold}MCPs${c_reset} (--mcp, ou none)\n"
   echo "  spec-workflow  planejamento requirements → design → tasks (npx, nada a instalar)"
   echo "  serena         navegação semântica do código (precisa de uv + serena)"
-  echo "  memory         memória vetorial Qdrant (precisa de Qdrant local ou VPS)"
   echo ""
   printf "${c_bold}Partes${c_reset} (--parts): agents commands skills settings\n\n"
   printf "${c_bold}Agents${c_reset} (--subagents):  %s\n" "$(item_names agents)"
@@ -342,7 +314,7 @@ if [ "$LIST" -eq 1 ]; then
   printf "${c_bold}Commands${c_reset} (--commands): %s\n" "$(item_names commands)"
   echo ""
   echo "Dependências (saem sozinhas se a peça não for instalada, a menos que você peça pelo nome):"
-  echo "  skill agent-memory → memory · skill spec-workflow → spec-workflow · skill local-infra → infra · agent suporte → algum MCP"
+  echo "  skill spec-workflow → spec-workflow · skill local-infra → infra · agent suporte → algum MCP"
   exit 0
 fi
 ok "Fonte: $SRC_DIR"
@@ -402,9 +374,9 @@ if [ "$PRESET_SET" -eq 0 ] && [ "$MCP_SET" -eq 0 ] && [ "$PARTS_SET" -eq 0 ]; th
   if [ "$ASSUME_YES" -eq 1 ] || [ "$HAVE_TTY" -eq 0 ]; then PRESET="full"; else
     echo ""
     printf "${c_bold}O que instalar?${c_reset}\n"
-    printf "  1) Só arquivos — agents, skills, commands e AGENTS.md. Sem MCP, sem infra, sem Qdrant.\n"
+    printf "  1) Só arquivos — agents, skills, commands e AGENTS.md. Sem MCP e sem infra.\n"
     printf "  2) Leve        — arquivos + spec-workflow (planejamento). Nada pra instalar na máquina.\n"
-    printf "  3) Completo    — leve + Serena + memória Qdrant + settings.json do Claude\n"
+    printf "  3) Completo    — leve + Serena + settings.json do Claude\n"
     printf "  4) Sob medida  — escolho os MCPs e quais agents/skills/commands\n"
     pr=""; printf "Escolha [3]: "; prompt_read pr
     case "$pr" in 1) PRESET=files;; 2) PRESET=lite;; 4) PRESET=custom; ASK_CUSTOM=1;; *) PRESET=full;; esac
@@ -415,7 +387,7 @@ fi
 case "$PRESET" in
   files) DEF_MCP="";                            DEF_PARTS="agents,commands,skills";;
   lite)  DEF_MCP="spec-workflow";               DEF_PARTS="agents,commands,skills";;
-  *)     DEF_MCP="spec-workflow,serena,memory"; DEF_PARTS="agents,commands,skills,settings";;
+  *)     DEF_MCP="spec-workflow,serena";        DEF_PARTS="agents,commands,skills,settings";;
 esac
 
 if [ "$ASK_CUSTOM" -eq 1 ]; then
@@ -427,10 +399,9 @@ if [ "$ASK_CUSTOM" -eq 1 ]; then
     echo ""
     printf "${c_bold}Quais MCPs?${c_reset} (vírgula; enter = nenhum)\n"
     printf "  1) spec-workflow — planejamento (npx, nada a instalar)\n"
-    printf "  2) serena        — navegação semântica do código (precisa de uv)\n"
-    printf "  3) memory        — memória vetorial Qdrant (precisa de Qdrant local ou VPS)\n> "
+    printf "  2) serena        — navegação semântica do código (precisa de uv)\n> "
     r=""; prompt_read r
-    MCP_CSV="$(printf '%s' "$r" | sed 's/1/spec-workflow/g; s/2/serena/g; s/3/memory/g')"; MCP_SET=1
+    MCP_CSV="$(printf '%s' "$r" | sed 's/1/spec-workflow/g; s/2/serena/g')"; MCP_SET=1
   fi
   if [ "$PARTS_SET" -eq 0 ]; then
     echo ""
@@ -461,9 +432,10 @@ norm_mcp() {
     case "$x" in
       spec|spec-workflow|specworkflow)            x=spec-workflow;;
       serena)                                     ;;
-      memory|memoria|memória|qdrant|qdrant-memory) x=memory;;
       none|nenhum)                                continue;;
-      *) die "--mcp: '$x' desconhecido (use spec-workflow, serena, memory ou none)";;
+      memory|memoria|memória|qdrant|qdrant-memory)
+        die "--mcp memory saiu do instalador: a memória Qdrant virou a skill 'qdrant-setup' (command /qdrant).";;
+      *) die "--mcp: '$x' desconhecido (use spec-workflow, serena ou none)";;
     esac
     csv_has "$out" "$x" || out="${out:+$out,}$x"
   done
@@ -504,23 +476,15 @@ check_names skills   "$SKILLS_CSV"
 check_names agents   "$SUBAGENTS_CSV"
 check_names commands "$COMMANDS_CSV"
 
-HAS_SPEC=0; HAS_SERENA=0; HAS_MEMORY=0
+HAS_SPEC=0; HAS_SERENA=0
 if csv_has "$MCP_CSV" spec-workflow; then HAS_SPEC=1; fi
 if csv_has "$MCP_CSV" serena;        then HAS_SERENA=1; fi
-if csv_has "$MCP_CSV" memory;        then HAS_MEMORY=1; fi
 
 # ---------- pré-requisitos da máquina (uma vez por máquina, opt-in) ----------
-# Só pergunta o que faz sentido pro que foi escolhido: sem memória não tem infra, sem serena não instala serena.
-if [ -z "$SETUP_INFRA" ]; then
-  if [ "$HAS_MEMORY" -eq 0 ] || [ "$ASSUME_YES" -eq 1 ]; then SETUP_INFRA=0; else
-    echo ""
-    printf "${c_bold}Montar o local-infra (stack global da máquina)?${c_reset}\n"
-    printf "  Um stack Docker único (Postgres + Redis + Qdrant + tunnels) que sobe UMA vez e\n"
-    printf "  serve TODOS os seus projetos — o Qdrant guarda a memória dos agentes. Senhas aleatórias.\n"
-    r=""; printf "  (pule se já tem, se usa Qdrant na VPS, ou se não usa Docker) [s/N]: "; prompt_read r
-    case "$r" in [sSyY]*) SETUP_INFRA=1;; *) SETUP_INFRA=0;; esac
-  fi
-fi
+# Só pergunta o que faz sentido pro que foi escolhido: sem serena não instala serena.
+# O local-infra não é mais oferecido sozinho — ele só aparecia porque o Qdrant guardava a
+# memória, e a memória saiu daqui. Continua disponível via --infra e pela skill 'local-infra'.
+[ -z "$SETUP_INFRA" ] && SETUP_INFRA=0
 if [ -z "$SETUP_SERENA" ]; then
   if [ "$HAS_SERENA" -eq 0 ] || [ "$ASSUME_YES" -eq 1 ]; then SETUP_SERENA=0; else
     echo ""
@@ -531,70 +495,12 @@ if [ -z "$SETUP_SERENA" ]; then
   fi
 fi
 
-# ---------- modo de memória (local vs VPS) — só se a memória foi escolhida ----------
-if [ "$HAS_MEMORY" -eq 1 ]; then
-  if [ -z "$MEMORY_MODE" ]; then
-    if [ "$ASSUME_YES" -eq 1 ]; then MEMORY_MODE="local"; else
-      echo ""
-      printf "${c_bold}Onde fica a memória (Qdrant) deste e dos próximos projetos desta máquina?${c_reset}\n"
-      printf "  1) Local — http://localhost:6333 (do ~/local-infra). Simples; memória só nesta máquina.\n"
-      printf "  2) VPS   — HTTPS público com api-key. Memória segue você entre máquinas.\n"
-      printf "  (essa escolha é salva em ~/.buildison/vps.env e vale pra novos projetos.\n"
-      printf "   Veja docs/infra/qdrant-vps-template.md no buildison pra montar a VPS.)\n"
-      mm=""; printf "Escolha [1]: "; prompt_read mm
-      case "$mm" in 2) MEMORY_MODE="vps";; *) MEMORY_MODE="local";; esac
-    fi
-  fi
-  if [ "$MEMORY_MODE" = "vps" ] && [ -z "$QDRANT_URL_OPT" ]; then
-    if [ "$ASSUME_YES" -eq 1 ]; then
-      die "--memory=vps requer --qdrant-url=<URL> em modo --yes."
-    fi
-    qurl=""; printf "URL do Qdrant na VPS (ex: https://qdrant.seu-dominio.com): "; prompt_read qurl
-    [ -z "$qurl" ] && die "URL vazia. Aborte ou rode de novo informando --qdrant-url."
-    QDRANT_URL_OPT="$qurl"
-  fi
-  [ "$MEMORY_MODE" = "vps" ] && save_machine_cfg
-  [ "$MEMORY_MODE" = "local" ] && [ -f "$BLD_CFG" ] && save_machine_cfg
-fi
-[ -z "$MEMORY_MODE" ] && MEMORY_MODE="local"
-
-# nome da collection do Qdrant derivado do projeto
-PROJ_NAME="$(basename "$TARGET_DIR" | tr '[:upper:] -' '[:lower:]__' | tr -cd 'a-z0-9_')"
-COLLECTION="agent_${PROJ_NAME:-project_main}"
-EMBED="sentence-transformers/all-MiniLM-L6-v2"
-if [ "$MEMORY_MODE" = "vps" ]; then QDRANT_URL="$QDRANT_URL_OPT"; else QDRANT_URL="http://localhost:6333"; fi
-
-# Num --update, respeita a collection que já está no .mcp.json: ela pode ter sido
-# ajustada à mão e não bater com o nome derivado do diretório (COLLECTION).
-if [ "$HAS_MEMORY" -eq 1 ] && [ "$UPDATE" -eq 1 ] && [ -f "$TARGET_DIR/.mcp.json" ]; then
-  PY="$(find_python || true)"
-  if [ -n "$PY" ]; then
-    PREV_COLL="$("$PY" -c "
-import json,sys
-try:
-    print(json.load(open(sys.argv[1]))['mcpServers']['qdrant-memory']['env'].get('COLLECTION_NAME',''))
-except Exception: print('')
-" "$TARGET_DIR/.mcp.json" 2>/dev/null || true)"
-    if [ -n "$PREV_COLL" ] && [ "$PREV_COLL" != "$COLLECTION" ]; then
-      warn "mantendo collection existente: $PREV_COLL (derivada seria $COLLECTION)"
-      COLLECTION="$PREV_COLL"
-    fi
-  fi
-fi
-if [ "$HAS_MEMORY" -eq 1 ]; then info "Memória: $MEMORY_MODE ($QDRANT_URL) · collection ${COLLECTION}"; fi
-if [ "$MEMORY_MODE" = "vps" ]; then
-  QDRANT_ENV_JSON="{ \"QDRANT_URL\": \"${QDRANT_URL}\", \"QDRANT_API_KEY\": \"\${QDRANT_API_KEY}\", \"COLLECTION_NAME\": \"${COLLECTION}\", \"EMBEDDING_MODEL\": \"${EMBED}\" }"
-else
-  QDRANT_ENV_JSON="{ \"QDRANT_URL\": \"${QDRANT_URL}\", \"COLLECTION_NAME\": \"${COLLECTION}\", \"EMBEDDING_MODEL\": \"${EMBED}\" }"
-fi
-
 # ---------- tags: o que existe neste projeto (filtra AGENTS.md, templates e itens) ----------
 TAGS=""
 if [ "$HAS_SPEC" -eq 1 ];   then TAGS="$TAGS spec"; fi
 if [ "$HAS_SERENA" -eq 1 ]; then TAGS="$TAGS serena"; fi
-if [ "$HAS_MEMORY" -eq 1 ]; then TAGS="$TAGS memory"; fi
 if [ -n "$MCP_CSV" ];       then TAGS="$TAGS mcp"; fi
-if [ "$PRESET" = "full" ] || [ "$SETUP_INFRA" = "1" ] || { [ "$HAS_MEMORY" -eq 1 ] && [ "$MEMORY_MODE" = "local" ]; }; then
+if [ "$PRESET" = "full" ] || [ "$SETUP_INFRA" = "1" ]; then
   TAGS="$TAGS infra"
 fi
 has_tag() { case " $TAGS " in *" $1 "*) return 0;; esac; return 1; }
@@ -674,6 +580,42 @@ if [ "$HAS_SPEC" -eq 1 ] && [ -d "$SRC_DIR/.spec-workflow/templates" ]; then
   ok ".spec-workflow/templates/"
 fi
 
+# Regrava um JSON de MCP preservando servidores que o instalador NÃO gerencia.
+# O arquivo é reescrito do zero a cada run; sem isso, um MCP que você (ou a skill
+# qdrant-setup) adicionou sumia em silêncio no próximo --update — o mesmo modo de falha
+# que o bloco do Codex já tinha com tabelas desconhecidas.
+merge_mcp_json() { # arquivo  chave-raiz  json-novo  managed-csv
+  local f="$1" root="$2" fresh="$3" managed="$4" py
+  py="$(find_python || true)"
+  if [ -z "$py" ] || [ ! -f "$f" ]; then
+    printf '%s\n' "$fresh" > "$f"; return 0
+  fi
+  printf '%s' "$fresh" > "$WORK/mcp-fresh.json"
+  "$py" - "$f" "$root" "$WORK/mcp-fresh.json" "$managed" <<'PYMERGE' || printf '%s\n' "$fresh" > "$f"
+import json, sys
+path, root, freshpath, managed = sys.argv[1:5]
+managed = {m for m in managed.split(",") if m}
+fresh = json.load(open(freshpath))
+try:
+    old = json.load(open(path))
+    if not isinstance(old, dict): old = {}
+except Exception:
+    old = {}
+out = dict(old)
+out.update({k: v for k, v in fresh.items() if k != root})
+servers = dict(old.get(root) or {})
+# tira só o que ESTE instalador gerencia e não foi pedido agora; o resto fica
+for k in list(servers):
+    if k in managed and k not in (fresh.get(root) or {}):
+        del servers[k]
+servers.update(fresh.get(root) or {})
+out[root] = servers
+with open(path, "w") as f:
+    json.dump(out, f, indent=2); f.write("\n")
+PYMERGE
+  return 0
+}
+
 # entradas de JSON separadas por vírgula (.mcp.json / opencode.json)
 ENTRIES=""
 add_entry() { if [ -n "$ENTRIES" ]; then ENTRIES="$ENTRIES,"$'\n'; fi; ENTRIES="$ENTRIES$1"; }
@@ -739,14 +681,8 @@ if [ "$SEL_CLAUDE" -eq 1 ]; then
     if [ "$HAS_SERENA" -eq 1 ]; then
       add_entry '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }'
     fi
-    if [ "$HAS_MEMORY" -eq 1 ]; then
-      add_entry "    \"qdrant-memory\": {
-      \"command\": \"uvx\",
-      \"args\": [\"mcp-server-qdrant\"],
-      \"env\": ${QDRANT_ENV_JSON}
-    }"
-    fi
-    printf '{\n  "mcpServers": {\n%s\n  }\n}\n' "$ENTRIES" > "$TARGET_DIR/.mcp.json"
+    merge_mcp_json "$TARGET_DIR/.mcp.json" mcpServers \
+      "$(printf '{\n  "mcpServers": {\n%s\n  }\n}\n' "$ENTRIES")" "spec-workflow,serena"
     ok ".mcp.json (${MCP_CSV})"
   else
     ok "Claude: sem MCP neste preset — .mcp.json não gerado"
@@ -765,13 +701,6 @@ codex_table() {
       printf '[mcp_servers.spec-workflow]\ncommand = "npx"\nargs = ["-y", "@pimzino/spec-workflow-mcp@latest", "."]\n';;
     serena)
       printf '[mcp_servers.serena]\ncommand = "serena"\nargs = ["start-mcp-server", "--context", "codex", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"]\n';;
-    qdrant-memory)
-      printf '[mcp_servers.qdrant-memory]\ncommand = "uvx"\nargs = ["mcp-server-qdrant"]\n'
-      if [ "$MEMORY_MODE" = "vps" ]; then
-        printf 'env = { QDRANT_URL = "%s", QDRANT_API_KEY = "${QDRANT_API_KEY}", COLLECTION_NAME = "%s", EMBEDDING_MODEL = "%s" }\n' "$QDRANT_URL" "$COLLECTION" "$EMBED"
-      else
-        printf 'env = { QDRANT_URL = "%s", COLLECTION_NAME = "%s", EMBEDDING_MODEL = "%s" }\n' "$QDRANT_URL" "$COLLECTION" "$EMBED"
-      fi;;
   esac
 }
 # tabelas ([a.b], não [[array]]) declaradas mais de uma vez
@@ -832,7 +761,6 @@ codex_write_mcp() {
   fi
   if [ "$HAS_SPEC" -eq 1 ];   then want="$want spec-workflow"; fi
   if [ "$HAS_SERENA" -eq 1 ]; then want="$want serena"; fi
-  if [ "$HAS_MEMORY" -eq 1 ]; then want="$want qdrant-memory"; fi
   # O config é de TODOS os projetos: o que um install anterior pôs no bloco e este não pediu
   # continua lá (um projeto "lite" não desliga a memória que outro projeto usa).
   # Varre o bloco INTEIRO, não só o trio do buildison: quem edita o ~/.codex/config.toml à mão
@@ -907,14 +835,6 @@ if [ "$SEL_OPENCODE" -eq 1 ]; then
     if [ "$HAS_SERENA" -eq 1 ]; then
       add_entry '    "serena": { "type": "local", "command": ["serena", "start-mcp-server", "--context", "ide", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"], "enabled": true }'
     fi
-    if [ "$HAS_MEMORY" -eq 1 ]; then
-      add_entry "    \"qdrant-memory\": {
-      \"type\": \"local\",
-      \"command\": [\"uvx\", \"mcp-server-qdrant\"],
-      \"environment\": ${QDRANT_ENV_JSON},
-      \"enabled\": true
-    }"
-    fi
     OC_JSON="$(printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {\n%s\n  }\n}' "$ENTRIES")"
     if [ -e "$OC_CFG" ] && [ "$FORCE" -eq 0 ]; then
       printf '%s\n' "$OC_JSON" > "$TARGET_DIR/opencode.buildison.json"
@@ -970,9 +890,9 @@ if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
     mkdir -p "$(dirname "$AG_CFG")"
     [ -f "$AG_CFG" ] && cp "$AG_CFG" "$AG_CFG.bak.$(date +%s 2>/dev/null || echo bak)" 2>/dev/null || true
     # merge: mexe SÓ nas chaves escolhidas, preserva o resto do config global
-    "$PY" - "$AG_CFG" "$TARGET_DIR" "$QDRANT_URL" "$COLLECTION" "$EMBED" "$MEMORY_MODE" "$MCP_CSV" <<'PY'
+    "$PY" - "$AG_CFG" "$TARGET_DIR" "$MCP_CSV" <<'PY'
 import json, os, sys
-path, proj, qurl, coll, embed, mode, wanted = sys.argv[1:8]
+path, proj, wanted = sys.argv[1:4]
 wanted = wanted.split(",")
 try:
     d = json.load(open(path))
@@ -984,13 +904,6 @@ if "spec-workflow" in wanted:
     servers["spec-workflow"] = {"command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", proj]}
 if "serena" in wanted:
     servers["serena"] = {"command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", proj, "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"]}
-if "memory" in wanted:
-    env = {"QDRANT_URL": qurl}
-    if mode == "vps":
-        env["QDRANT_API_KEY"] = "${QDRANT_API_KEY}"
-    env["COLLECTION_NAME"] = coll
-    env["EMBEDDING_MODEL"] = embed
-    servers["qdrant-memory"] = {"command": "uvx", "args": ["mcp-server-qdrant"], "env": env}
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w") as f:
     json.dump(d, f, indent=2); f.write("\n")
@@ -1032,28 +945,11 @@ if [ -n "$INFRA_PGPASS" ]; then
   echo "  (salva em ~/local-infra/.env · connection: postgresql://dev:${INFRA_PGPASS}@localhost:5432/<db>)"
 fi
 
-if [ "$HAS_MEMORY" -eq 1 ] && [ "$MEMORY_MODE" = "vps" ]; then
-  echo ""
-  printf "${c_bold}Memória: VPS (${QDRANT_URL})${c_reset}\n"
-  echo "  O .mcp.json gerado usa \${QDRANT_API_KEY} (expandida do AMBIENTE do shell que abre o claude)."
-  echo "  Antes de rodar o claude, exporte a key UMA vez:"
-  echo "    export QDRANT_API_KEY=<sua-api-key>      # por sessão"
-  echo "    echo 'export QDRANT_API_KEY=...' >> ~/.zshrc   # persistente"
-  echo "  Doc: docs/infra/qdrant-vps-template.md (no buildison)"
-fi
-
 echo ""
 printf "${c_bold}Próximos passos:${c_reset}\n"
 STEP=1
 step() { echo "  $STEP. $*"; STEP=$((STEP+1)); }
-if [ "$HAS_MEMORY" -eq 1 ]; then
-  if [ "$MEMORY_MODE" = "local" ]; then
-    if [ "$SETUP_INFRA" = "1" ]; then step "Subir a infra:  cd ~/local-infra && docker compose up -d"
-    else step "Infra (se ainda não tem):  rode de novo com --infra, ou suba seu ~/local-infra"; fi
-  else
-    step "Garanta que a VPS Qdrant está no ar (https) e que QDRANT_API_KEY está exportada"
-  fi
-fi
+if [ "$SETUP_INFRA" = "1" ]; then step "Subir a infra:  cd ~/local-infra && docker compose up -d"; fi
 if [ "$HAS_SERENA" -eq 1 ] && [ "$SETUP_SERENA" != "1" ]; then
   step "Serena:  uv tool install -p 3.13 serena-agent && serena init"
 fi

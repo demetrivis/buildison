@@ -14,7 +14,7 @@
 
 <!-- bld:if source -->
 > **Nota da fonte (não vai para o projeto):** os blocos `<!-- bld:if X -->` … `<!-- bld:end -->` são filtrados
-> pelo instalador conforme o que foi instalado — `spec`, `serena`, `memory`, `mcp` (algum MCP) e `infra`;
+> pelo instalador conforme o que foi instalado — `spec`, `serena`, `mcp` (algum MCP) e `infra`;
 > `!X` inverte. No projeto instalado sobra só o texto do que existe lá.
 <!-- bld:end -->
 
@@ -62,19 +62,17 @@ docker compose down       # derruba (mantém volumes)
 Para montar o `~/local-infra/docker-compose.yml` do zero, use a skill `local-infra`.
 <!-- bld:end -->
 
-<!-- bld:if memory -->
-## Memória dos agentes (Qdrant)
+## Memória vetorial (Qdrant) — opcional, sob demanda
 
-Dois modos, escolha **uma vez por máquina** no instalador (`--memory=local|vps`,
-salvo em `~/.buildison/vps.env`):
+**Não vem instalada.** O buildison não configura Qdrant: se você quiser memória vetorial
+persistente neste projeto, peça ao agente — **`/qdrant`** (ou "configura a memória do projeto").
+A skill `qdrant-setup` cuida de tudo: escolhe local (`http://localhost:6333`, do `~/local-infra`)
+ou VPS (`https://qdrant.<seu-dominio>` com `api-key`), registra o MCP `qdrant-memory` no agente
+que você usa, e cria a collection `agent_<projeto>`.
 
-- **Local** (default): REST `http://localhost:6333` (sobe com o `~/local-infra`) · gRPC `6334` · sem auth · dashboard em `http://localhost:6333/dashboard`. Simples; memória só nesta máquina.
-- **VPS**: `https://qdrant.<seu-dominio>` com header `api-key`. Memória **segue você entre máquinas**. Setup em `docs/infra/qdrant-vps-template.md`.
-
-Em ambos: 1 instância Qdrant, **uma collection por projeto** (ex.: `agent_<projeto>`).
-Acesso via MCP `qdrant-memory`; convenções na skill `agent-memory`. Sem replicação automática
-entre local e VPS — escolha uma como fonte de verdade.
-<!-- bld:end -->
+Uma instância de Qdrant, **uma collection por projeto**. Convenções de uso (o que guardar,
+o que nunca guardar) na skill `agent-memory`. Sem replicação entre local e VPS — escolha uma
+como fonte de verdade.
 
 <!-- bld:if mcp -->
 ## Toolbox de agentes (MCP)
@@ -89,10 +87,7 @@ Config dos MCPs: [`.mcp.json`](.mcp.json) (Claude Code) · `~/.codex/config.toml
 - **Serena** — navegação semântica do codebase. MCP `serena`.
   Pré-requisito (uma vez por máquina): `uv tool install -p 3.13 serena-agent && serena init`.
 <!-- bld:end -->
-<!-- bld:if memory -->
-- **Qdrant** — memória vetorial persistente, uma collection por projeto. MCP `qdrant-memory` · skill `agent-memory`.
-  Roda via `uvx mcp-server-qdrant`; o Qdrant precisa estar no ar (local-infra ou VPS). Por projeto: `COLLECTION_NAME=agent_<projeto>`.
-<!-- bld:end -->
+- **Qdrant** — memória vetorial, **não instalada por padrão**: rode `/qdrant` (skill `qdrant-setup`) quando quiser.
 - **Context7** — docs atualizadas de libs/APIs. MCP `context7` (se estiver configurado no seu agente).
 <!-- bld:end -->
 
@@ -113,13 +108,10 @@ Config dos MCPs: [`.mcp.json`](.mcp.json) (Claude Code) · `~/.codex/config.toml
 - Localize símbolos e referências (busca no código) antes de editar módulos desconhecidos — não leia o repo inteiro às cegas.
 <!-- bld:end -->
 - Use documentação atualizada (**Context7**, se disponível) para libs/APIs externas — não confie em memória de versões antigas.
-<!-- bld:if memory -->
-- Use **Qdrant** (`qdrant-memory`) só para recuperar/gravar **contexto durável** do projeto. Ver skill `agent-memory`.
-<!-- bld:end -->
+- Se o MCP `qdrant-memory` estiver configurado (via `/qdrant`), use-o só para recuperar/gravar
+  **contexto durável** do projeto. Ver skill `agent-memory`.
 - Ao final: atualize `docs/agent/context.md` se o stack/arquitetura mudou e registre decisões em `docs/agent/decisions.md`.
-<!-- bld:if memory -->
-  Salve também a memória durável no Qdrant.
-<!-- bld:end -->
+  Se houver Qdrant configurado, salve também a memória durável lá.
 
 ## Coding rules
 
@@ -131,14 +123,8 @@ Config dos MCPs: [`.mcp.json`](.mcp.json) (Claude Code) · `~/.codex/config.toml
 
 ## Memory policy
 
-<!-- bld:if memory -->
-Detalhes operacionais na skill `agent-memory`. Resumo:
-
-**Guardar** (memória durável no Qdrant ou em `docs/agent/decisions.md`):
-<!-- bld:end -->
-<!-- bld:if !memory -->
-**Guardar** (em `docs/agent/decisions.md`; o que for stack/arquitetura vai no `docs/agent/context.md`):
-<!-- bld:end -->
+**Guardar** (em `docs/agent/decisions.md`; o que for stack/arquitetura vai no `docs/agent/context.md`
+— e no Qdrant também, se você tiver rodado `/qdrant`. Detalhes na skill `agent-memory`):
 - decisões de arquitetura e o motivo
 - convenções do projeto
 - bugs recorrentes e suas correções

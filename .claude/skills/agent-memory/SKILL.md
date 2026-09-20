@@ -13,9 +13,11 @@ separado por **collections**. Acesso via MCP `qdrant-memory` (ver `.mcp.json` na
 > decisões técnicas formais ficam em `docs/agent/decisions.md` (versionado no Git). O Qdrant guarda o
 > que é durável mas não merece virar arquivo — aprendizados, padrões, quirks de integração.
 
-## Infra — dois modos (escolha uma vez por máquina)
+## Infra — dois modos
 
-Escolha feita pelo instalador (`--memory=local|vps`), salva em `~/.buildison/vps.env`:
+Esta skill trata do **uso** da memória. O **setup** (instalar, trocar de modo, remover) é da skill
+`qdrant-setup`, command **`/qdrant`** — o instalador do buildison não configura Qdrant. Se o MCP
+`qdrant-memory` não existir no projeto, é porque ninguém rodou `/qdrant` ainda.
 
 - **Local** (default): Qdrant em Docker em `~/local-infra/` (skill `local-infra`) — REST `:6333`, gRPC `:6334`, sem auth. Memória só nesta máquina.
 - **VPS**: `https://qdrant.<seu-dominio>` com header `api-key`. Memória **segue você entre máquinas**. Setup: `docs/infra/qdrant-vps-template.md`.
@@ -25,7 +27,7 @@ Em ambos:
 - Embedding default: `sentence-transformers/all-MiniLM-L6-v2` (FastEmbed local, sem API key)
 - 1 volume persistente guarda todas as collections (local ou na VPS)
 
-Modo VPS: o `.mcp.json` usa `"QDRANT_API_KEY": "${QDRANT_API_KEY}"` (literal, expandido do **ambiente do shell** que abre o Claude). A key **nunca entra** no arquivo versionado — exporte uma vez em `~/.zshrc`/`~/.bashrc` (Unix) ou via `SetEnvironmentVariable` (Windows).
+Modo VPS: o config do agente usa `"QDRANT_API_KEY": "${QDRANT_API_KEY}"` (literal, expandido do **ambiente do shell** que abre o Claude). A key **nunca entra** no arquivo versionado — exporte uma vez em `~/.zshrc`/`~/.bashrc` (Unix) ou via `SetEnvironmentVariable` (Windows).
 
 **Sem replicação automática** local ↔ VPS — escolha uma como fonte de verdade.
 

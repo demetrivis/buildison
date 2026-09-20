@@ -16,6 +16,31 @@ Formato por entrada:
 
 ---
 
+## 2026-09-19 — Qdrant sai do instalador e vira a skill `qdrant-setup`
+
+**Contexto:** o Qdrant era um MCP de primeira classe do instalador (`--memory local|vps`, `--qdrant-url`,
+preset `full`, `~/.buildison/vps.env`, `switch.sh`/`switch.ps1`) — 77 ocorrências no `install.sh` e 84 no
+`install.ps1`. Isso obrigava toda instalação a decidir sobre memória vetorial, e no Codex era pior: o
+`~/.codex/config.toml` é **global** com nomes de tabela fixos, então instalar um projeto novo reescrevia a
+`COLLECTION_NAME` de todos os outros. Um install de rotina sequestrava a memória do projeto anterior.
+
+**Decisão:** tirar o Qdrant do instalador por completo e movê-lo para a skill `qdrant-setup` + command
+`/qdrant`, acionados sob demanda. O `switch.sh`/`switch.ps1` foi absorvido pela skill (é o mesmo trabalho:
+reescrever o MCP nos 4 configs) e removido, junto com o subcomando `switch` do `bin/buildison.mjs`. As flags
+`--memory`/`--qdrant-url` e `--mcp memory` agora morrem com mensagem apontando pra skill, em vez de sumirem
+caladas. O `~/local-infra` **continua** trazendo Qdrant no compose — só deixou de ser configurado sozinho.
+
+**Motivo:** memória vetorial é escolha de projeto, não de boilerplate. Quem quer, pede. Alternativa
+descartada: manter o MCP e só parar de perguntar — não resolvia o sequestro de collection no Codex, que é
+consequência do config global, não do prompt.
+
+**Impacto:** `install.sh`/`install.ps1` perdem as flags e a emissão do `qdrant-memory` nos 4 agentes; o
+preset `full` passa a ser `spec-workflow + serena + settings.json`. O `local-infra` deixou de ser oferecido
+no prompt (ele só aparecia por causa do Qdrant) — continua via `--infra` e pela skill. O `AGENTS.md` perdeu
+a tag `bld:if memory`; a seção de memória agora é incondicional e aponta pra skill. Quem já tinha
+`qdrant-memory` configurado **não perde nada**: o `keep` do Codex preserva a tabela, e `.mcp.json` de
+projeto instalado não é tocado sem `--update`.
+
 ## 2026-06-20 — Toolbox de agentes (memória + planejamento)
 
 **Contexto:** boilerplate precisava de contexto durável, planejamento estruturado e navegação semântica para agentes de código.

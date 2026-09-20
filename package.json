@@ -10,8 +10,6 @@
     "bin/",
     "install.sh",
     "install.ps1",
-    "switch.sh",
-    "switch.ps1",
     "AGENTS.md",
     "docs/infra/*-template.md",
     "CLAUDE.md",

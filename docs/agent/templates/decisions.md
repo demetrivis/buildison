@@ -2,9 +2,7 @@
 
 > Log de decisões técnicas relevantes (ADR enxuto). Versionado no Git — é a fonte de verdade
 > para "por que está assim".
-<!-- bld:if memory -->
-> Memória durável de baixo atrito vai para o Qdrant (skill `agent-memory`).
-<!-- bld:end -->
+> Se você tiver rodado `/qdrant`, a memória durável de baixo atrito vai para o Qdrant (skill `agent-memory`).
 
 Formato por entrada:
 

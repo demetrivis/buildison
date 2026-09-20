@@ -156,11 +156,11 @@ curl -s -H "api-key: $QDRANT_API_KEY" https://qdrant.<SEU_DOMINIO>/collections |
 Em qualquer projeto que herde o boilerplate:
 
 ```bash
-# escolhe modo VPS uma vez por máquina (fica salvo em ~/.buildison/vps.env)
-npx buildison install --memory=vps --qdrant-url=https://qdrant.<SEU_DOMINIO>
+# instale o buildison normalmente (ele NÃO configura Qdrant), e então, dentro do projeto:
+/qdrant        # skill qdrant-setup → escolha "vps" e informe https://qdrant.<SEU_DOMINIO>
 ```
 
-O instalador gera o `.mcp.json` (e config equivalente pra Codex/OpenCode) com:
+A skill grava o `.mcp.json` (e config equivalente pra Codex/OpenCode/Antigravity) com:
 
 ```json
 "qdrant-memory": {
@@ -201,7 +201,7 @@ Reinicie o terminal/Claude Code pra valer.
 | Custo | grátis | VPS + domínio |
 | Quem mantém | você (Docker local) | você (VPS) |
 
-> **Trocar de modo** depois: rode o instalador de novo com `--memory=local` ou `--memory=vps`. O config per-máquina (`~/.buildison/vps.env`) é atualizado.
+> **Trocar de modo** depois: rode `/qdrant` de novo e escolha o outro modo. É a mesma skill que instala.
 
 > **Não há replicação automática**: se você salvar memórias no local e depois trocar pra VPS, elas **não aparecem lá**. Pra migrar, exporte/importe via `curl` na API do Qdrant.
 

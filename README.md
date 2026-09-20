@@ -10,9 +10,9 @@ Sem duplicar conteúdo: `AGENTS.md` + `.claude/` + `docs/agent/` são a fonte; c
 ## Índice
 
 - [Instalar do zero](#instalar-do-zero)
-- [Instalar leve ou sob medida](#instalar-leve-ou-sob-medida) — só os arquivos, sem MCP/infra/Qdrant
+- [Instalar leve ou sob medida](#instalar-leve-ou-sob-medida) — só os arquivos, sem MCP e sem infra
 - [Atualizar um projeto que já tem buildison](#atualizar-um-projeto-que-já-tem-buildison)
-- [A infra](#a-infra) — local-infra, memória local vs VPS
+- [A infra](#a-infra) — local-infra; memória vetorial via `/qdrant`
 - [O que cada agente recebe](#o-que-cada-agente-recebe)
 - [Referência](#referência) — agents, commands, skills
 - [Banco de dados via MCP](#banco-de-dados-via-mcp-opcional)
@@ -85,13 +85,13 @@ Com flags:
 ## Instalar leve ou sob medida
 
 Por padrão o buildison instala tudo (`full`). Se você só quer os **arquivos** — agents, skills e commands — sem
-MCP, sem `local-infra` e sem banco vetorial, escolha um preset:
+MCP e sem `local-infra`, escolha um preset:
 
 | Preset | O que vem | Precisa na máquina |
 |---|---|---|
 | `files` | `AGENTS.md`, `docs/agent/`, `.claude/agents`, `.claude/commands`, `.claude/skills` (e `.agents/` no Antigravity) | nada |
 | `lite` | `files` + MCP `spec-workflow` + `.spec-workflow/templates/` | Node (`npx`) |
-| `full` _(default)_ | `lite` + MCP `serena` + memória Qdrant + `.claude/settings.json` | `uv`/Serena · Qdrant (local-infra ou VPS) |
+| `full` _(default)_ | `lite` + MCP `serena` + `.claude/settings.json` | `uv`/Serena |
 | `custom` | pergunta MCPs, partes e itens | depende |
 
 ```bash
@@ -110,7 +110,7 @@ As flags partem do preset e sobrescrevem só o que você passar:
 
 | bash | PowerShell | Valores |
 |---|---|---|
-| `--mcp` | `-Mcp` | `spec-workflow`, `serena`, `memory` ou `none` |
+| `--mcp` | `-Mcp` | `spec-workflow`, `serena` ou `none` |
 | `--parts` | `-Parts` | `agents`, `commands`, `skills`, `settings` |
 | `--skills` | `-Skills` | só estas skills |
 | `--subagents` | `-Subagents` | só estes agents |
@@ -121,11 +121,11 @@ As flags partem do preset e sobrescrevem só o que você passar:
 bash install.sh --dir . --agents claude,codex --mcp spec-workflow --skills golang,nestjs,database --commands commit,pr --yes
 ```
 
-O que depende de uma peça sai sozinho quando ela não é instalada: a skill `agent-memory` só vem com `memory`, a
-skill `spec-workflow` só com o MCP `spec-workflow`, a `local-infra` só com a infra, e o agent `suporte` só com algum
+O que depende de uma peça sai sozinho quando ela não é instalada: a
+skill `spec-workflow` só vem com o MCP `spec-workflow`, a `local-infra` só com a infra, e o agent `suporte` só com algum
 MCP. Pedir o item pelo nome força a instalação.
 
-O `AGENTS.md` e os templates de `docs/agent/` também são filtrados: as seções de infra, Qdrant e Serena só aparecem
+O `AGENTS.md` e os templates de `docs/agent/` também são filtrados: as seções de infra e Serena só aparecem
 no projeto se a peça foi instalada (blocos `<!-- bld:if ... -->` na fonte).
 
 A escolha fica salva em `.buildison`, na raiz do projeto. As próximas execuções e o `--update` reaproveitam esse
@@ -207,65 +207,39 @@ cd ~/local-infra && docker compose down
 
 > `down` mantém os volumes — os dados sobrevivem.
 
-### Memória: local ou VPS
+### Memória vetorial (Qdrant) — via `/qdrant`, não pelo instalador
 
-A memória vetorial dos agentes (Qdrant) roda **local** (default) ou **na sua VPS** — nesse caso ela segue você
-entre máquinas. A escolha é **por máquina**, salva em `~/.buildison/vps.env`, e projetos novos herdam.
+**O instalador não configura Qdrant.** Memória vetorial é opt-in: instale o buildison normalmente e,
+quando quiser memória persistente, peça ao agente — **`/qdrant`** (skill `qdrant-setup`).
 
-Local:
+A skill faz tudo: pergunta o modo, garante o Qdrant no ar, registra o MCP `qdrant-memory` **só nos
+agentes que o projeto usa**, cria a collection `agent_<projeto>` e valida com `qdrant-store`/`qdrant-find`.
+Ela também **troca de modo** e **remove** — foi ela que absorveu o antigo `buildison switch`.
 
-```bash
-npx github:demetrivis/buildison install --memory=local
-```
+| Modo | Endpoint | Quando |
+| :-- | :-- | :-- |
+| **local** | `http://localhost:6333` (do `~/local-infra`) | simples; a memória fica só nesta máquina |
+| **VPS** | `https://qdrant.<seu-dominio>` com `api-key` | a memória segue você entre máquinas |
 
-VPS:
-
-```bash
-npx github:demetrivis/buildison install --memory=vps --qdrant-url=https://qdrant.seu-dominio.com
-```
-
-No modo VPS o `.mcp.json` gerado usa `"QDRANT_API_KEY": "${QDRANT_API_KEY}"` — a key é lida do **ambiente do
+No modo VPS o config usa `"QDRANT_API_KEY": "${QDRANT_API_KEY}"` — a key é lida do **ambiente do
 shell**, nunca entra no arquivo versionado. Exporte antes de abrir o agente:
-
-```bash
-export QDRANT_API_KEY="sua-key-aqui"
-```
-
-Para deixar permanente:
 
 ```bash
 echo 'export QDRANT_API_KEY="sua-key-aqui"' >> ~/.zshrc && source ~/.zshrc
 ```
 
 > **Sem replicação entre local e VPS.** São instâncias independentes — memórias salvas numa não aparecem na
-> outra. Escolha uma como fonte de verdade.
+> outra, e trocar de modo **não migra** o que já foi gravado. Escolha uma como fonte de verdade.
+>
+> **O `~/.codex/config.toml` é global**: existe uma collection `qdrant-memory` pra máquina inteira, não uma
+> por projeto. A skill avisa antes de mexer nele.
 >
 > Setup completo da VPS (Traefik + HTTPS + API key): [`docs/infra/qdrant-vps-template.md`](docs/infra/qdrant-vps-template.md).
 
-### Trocar de modo num projeto já instalado
-
-Muda só os configs MCP, preservando `.claude/`, `AGENTS.md` e `docs/agent/`. Faz backup automático.
-
-```bash
-npx github:demetrivis/buildison switch --memory=vps --qdrant-url=https://qdrant.seu-dominio.com
-```
-
-```bash
-npx github:demetrivis/buildison switch --memory=local
-```
-
-No PowerShell nativo:
-
-```powershell
-.\switch.ps1 -Memory vps -QdrantUrl https://qdrant.seu-dominio.com
-```
-
-Reinicie o agente depois — os configs MCP são lidos no boot.
-
 ### Uma collection por projeto
 
-O Qdrant é uma instância só, com **uma collection por projeto** (`agent_<projeto>`). O instalador deriva o nome
-do diretório; o `--update` respeita o que já estiver configurado.
+O Qdrant é uma instância só, com **uma collection por projeto** (`agent_<projeto>`). A skill deriva o nome
+do diretório; passe `--collection` ao script dela pra usar outro.
 
 > ⚠️ A API key do Qdrant dá acesso a **todas** as collections da instância — o Qdrant não isola auth por
 > collection. Para isolamento real entre projetos, use instâncias separadas.
@@ -353,6 +327,7 @@ node scripts/gen-antigravity.mjs
 | `/ghaction` | Cria workflows de GitHub Actions (detecta o stack) |
 | `/portainer` | Gera stack para Portainer (Docker Swarm + Traefik + redes overlay) |
 | `/mecontext` | Atualiza `docs/agent/context.md` e a memória do projeto |
+| `/qdrant` | Instala/troca/remove a memória vetorial Qdrant (skill `qdrant-setup`) |
 
 ### Skills
 
@@ -371,7 +346,8 @@ node scripts/gen-antigravity.mjs
 | `favicon` | Favicon e metadata para Next.js |
 | `local-infra` | Stack global Docker na máquina de dev: Postgres + Redis + Qdrant + tunnels |
 | `vps-infra` | VPS do zero: Ubuntu, Docker, Swarm, Traefik com HTTPS, Portainer opcional. **Também vive no [infrailson](https://github.com/demetrivis/infrailson) — editou aqui, sincronize lá** |
-| `agent-memory` | Memória vetorial via Qdrant: collections, payload, o que guardar |
+| `qdrant-setup` | **Setup** da memória vetorial sob demanda: sobe/aponta o Qdrant, registra o MCP, cria a collection, troca de modo, remove |
+| `agent-memory` | **Uso** da memória vetorial: collections, payload, o que guardar e o que nunca guardar |
 | `spec-workflow` | Planejamento estruturado: requirements → design → tasks |
 | `plano-operacao` | Pipeline read-only de documentação de arquitetura (C4, ERD, ADR) |
 
@@ -456,10 +432,10 @@ CLAUDE.md              # bridge Claude Code → @AGENTS.md + @docs/agent/context
 │                      # prisma, nestjs, postgrest, arq-info, arq-info-web,
 │                      # design-system-extractor, suporte
 ├── commands/          # commit, push, pr, git, tlg, team, explore, logs,
-│                      # docker, ghaction, portainer, mecontext
+│                      # docker, ghaction, portainer, mecontext, qdrant
 └── skills/            # database, api, infra, logging, golang, nestjs, prisma,
                        # postgrest, cloudflare, seo-technical, favicon,
-                       # local-infra, vps-infra, agent-memory, spec-workflow,
+                       # local-infra, vps-infra, qdrant-setup, agent-memory, spec-workflow,
                        # plano-operacao
 
 .agents/               # glue p/ Antigravity (gerado de .claude/)
@@ -540,7 +516,7 @@ docker ps --filter name=qdrant
 - [Claude Code CLI](https://claude.ai/code) v2.1.32+ (ou Codex / OpenCode / Antigravity)
 - `git` e `bash` (ou PowerShell no Windows)
 - `python3` 3.11+ é opcional: valida o `config.toml` do Codex a fundo e grava o MCP do Antigravity (bash)
-- Só quando instalados: `uv` para o Serena · Qdrant (Docker Desktop com o `local-infra`, ou VPS) para a memória
+- Só quando instalados: `uv` para o Serena · Qdrant (Docker Desktop com o `local-infra`, ou VPS) para a memória — este via `/qdrant`, nunca pelo instalador
 
 ## Licença
 

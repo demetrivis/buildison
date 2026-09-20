@@ -39,10 +39,9 @@ Mapeamento (use a coluna da direita):
 > Modo forte (o Opus tende a preferir tools internas): inicie a sessão com
 > `claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"`.
 <!-- bld:end -->
-<!-- bld:if memory -->
+## Memória vetorial (opcional)
 
-## Memória (Qdrant, MCP `qdrant-memory`)
-
-No início de tarefas não triviais, recupere contexto durável com `qdrant-find`; ao final, salve
-decisões/padrões duráveis com `qdrant-store`. Nunca guarde secrets ou logs crus.
+Não vem instalada. Rode **`/qdrant`** (skill `qdrant-setup`) se quiser memória persistente
+via Qdrant. Depois de configurada: recupere com `qdrant-find` no início de tarefas não
+triviais e salve com `qdrant-store` no fim. Nunca guarde secrets ou logs crus.
 <!-- bld:end -->

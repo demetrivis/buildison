@@ -13,13 +13,13 @@ Uso:
   .\install.ps1 -Update
 
 Presets (-Preset):
-  files   so arquivos: AGENTS.md, docs\agent, agents, commands, skills. Sem MCP, sem infra, sem Qdrant.
+  files   so arquivos: AGENTS.md, docs\agent, agents, commands, skills. Sem MCP e sem infra.
   lite    files + MCP spec-workflow
-  full    lite + serena + memoria Qdrant + .claude\settings.json (default)
+  full    lite + serena + .claude\settings.json (default)
   custom  pergunta MCPs, partes e itens
 
 Sob medida (partem do preset e sobrescrevem so o que for passado):
-  -Mcp spec-workflow,serena,memory | none
+  -Mcp spec-workflow,serena | none
   -Parts agents,commands,skills,settings
   -Skills / -Subagents / -Commands <nomes>   (default: todos, menos os que dependem de peca nao instalada)
 A escolha fica em .buildison na raiz do projeto e e reaproveitada nas proximas execucoes.
@@ -29,7 +29,10 @@ e preserva CLAUDE.md, docs\agent\context.md e docs\agent\decisions.md. Nao use -
 
 Agentes: claude, codex, opencode, antigravity
 Flags: -Dir -Agents -Preset -Mcp -Parts -Skills -Subagents -Commands -List -Infra/-NoInfra
-       -Serena/-NoSerena -Memory local|vps -QdrantUrl -Yes -Force -Update
+       -Serena/-NoSerena -Yes -Force -Update
+
+  Memoria vetorial (Qdrant) NAO e mais instalada aqui: virou a skill 'qdrant-setup'
+  (+ command /qdrant). Peca ao agente "configura a memoria" depois de instalar.
 #>
 [CmdletBinding()]
 param(
@@ -46,8 +49,6 @@ param(
   [switch]$NoInfra,
   [switch]$Serena,
   [switch]$NoSerena,
-  [ValidateSet('','local','vps')] [string]$Memory = "",
-  [string]$QdrantUrl = "",
   [switch]$Yes,
   [switch]$Force,
   [switch]$Update,
@@ -56,7 +57,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $RepoUrl = 'https://github.com/demetrivis/buildison.git'
-$Embed   = 'sentence-transformers/all-MiniLM-L6-v2'
 
 function Info($m){ Write-Host "> $m"  -ForegroundColor Cyan }
 function Ok($m)  { Write-Host "OK $m" -ForegroundColor Green }
@@ -90,9 +90,9 @@ function ConvertTo-McpCsv($v) {
     $n = switch -Regex ($x.ToLower()) {
       '^(1|spec|spec-workflow|specworkflow)$'             { 'spec-workflow'; break }
       '^(2|serena)$'                                      { 'serena'; break }
-      '^(3|memory|memoria|memoria|qdrant|qdrant-memory)$' { 'memory'; break }
+      '^(memory|memoria|qdrant|qdrant-memory)$' { Die "-Mcp memory saiu do instalador: a memoria Qdrant virou a skill 'qdrant-setup' (command /qdrant)." }
       '^(none|nenhum)$'                                   { ''; break }
-      default { Die "-Mcp: '$x' desconhecido (use spec-workflow, serena, memory ou none)" }
+      default { Die "-Mcp: '$x' desconhecido (use spec-workflow, serena ou none)" }
     }
     if ($n -and ($out -notcontains $n)) { $out += $n }
   }
@@ -126,7 +126,6 @@ function Get-ItemNames([string]$part) {
 # a menos que voce peca o item pelo nome (-Skills agent-memory forca).
 function Get-ItemDep([string]$part, [string]$name) {
   switch ("$part/$name") {
-    'skills/agent-memory'  { return 'memory' }
     'skills/spec-workflow' { return 'spec' }
     'skills/local-infra'   { return 'infra' }
     'agents/suporte'       { return 'mcp' }
@@ -205,13 +204,6 @@ function Get-CodexTable([string]$name) {
     'serena' {
       return ('[mcp_servers.serena]', 'command = "serena"', 'args = ["start-mcp-server", "--context", "codex", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"]') -join "`n"
     }
-    'qdrant-memory' {
-      $envParts = @('QDRANT_URL = "' + $qUrl + '"')
-      if ($Memory -eq 'vps') { $envParts += 'QDRANT_API_KEY = "${QDRANT_API_KEY}"' }
-      $envParts += 'COLLECTION_NAME = "' + $collection + '"'
-      $envParts += 'EMBEDDING_MODEL = "' + $Embed + '"'
-      return ('[mcp_servers.qdrant-memory]', 'command = "uvx"', 'args = ["mcp-server-qdrant"]', ('env = { ' + ($envParts -join ', ') + ' }')) -join "`n"
-    }
   }
 }
 # tabelas ([a.b], nao [[array]]) declaradas mais de uma vez
@@ -270,7 +262,6 @@ function Update-CodexMcp {
   $want = @()
   if ($hasSpec)   { $want += 'spec-workflow' }
   if ($hasSerena) { $want += 'serena' }
-  if ($hasMemory) { $want += 'qdrant-memory' }
   # O config e de TODOS os projetos: o que um install anterior pos no bloco e este nao pediu
   # continua la (um projeto "lite" nao desliga a memoria que outro projeto usa).
   # Varre o bloco INTEIRO, nao so o trio do buildison: quem edita o ~/.codex/config.toml a mao
@@ -348,20 +339,19 @@ New-Dir $work
 
 if ($List) {
   Write-Host "Presets (-Preset)" -ForegroundColor White
-  Write-Host "  files   so arquivos - AGENTS.md, docs\agent, agents, commands, skills. Sem MCP, sem infra, sem Qdrant."
+  Write-Host "  files   so arquivos - AGENTS.md, docs\agent, agents, commands, skills. Sem MCP e sem infra."
   Write-Host "  lite    files + MCP spec-workflow (planejamento). Nada pra instalar na maquina."
-  Write-Host "  full    lite + serena + memoria Qdrant + .claude\settings.json  (default)"
+  Write-Host "  full    lite + serena + .claude\settings.json  (default)"
   Write-Host "  custom  pergunta MCPs, partes e quais itens"
   Write-Host "`nMCPs (-Mcp, ou none)" -ForegroundColor White
   Write-Host "  spec-workflow  planejamento requirements -> design -> tasks (npx, nada a instalar)"
   Write-Host "  serena         navegacao semantica do codigo (precisa de uv + serena)"
-  Write-Host "  memory         memoria vetorial Qdrant (precisa de Qdrant local ou VPS)"
   Write-Host "`nPartes (-Parts): agents commands skills settings" -ForegroundColor White
   Write-Host ("`nAgents (-Subagents):  " + ((Get-ItemNames 'agents') -join ' '))
   Write-Host ("Skills (-Skills):     " + ((Get-ItemNames 'skills') -join ' '))
   Write-Host ("Commands (-Commands): " + ((Get-ItemNames 'commands') -join ' '))
   Write-Host "`nDependencias (saem sozinhas se a peca nao for instalada, a menos que voce peca pelo nome):"
-  Write-Host "  skill agent-memory -> memory | skill spec-workflow -> spec-workflow | skill local-infra -> infra | agent suporte -> algum MCP"
+  Write-Host "  skill spec-workflow -> spec-workflow | skill local-infra -> infra | agent suporte -> algum MCP"
   Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
   return
 }
@@ -435,9 +425,9 @@ $selAntigravity = Test-Csv $AgentsCsv 'antigravity'
 if (-not $presetSet -and -not $mcpSet -and -not $partsSet) {
   if ($Yes) { $Preset = 'full' } else {
     Write-Host "`nO que instalar?" -ForegroundColor White
-    Write-Host "  1) So arquivos - agents, skills, commands e AGENTS.md. Sem MCP, sem infra, sem Qdrant."
+    Write-Host "  1) So arquivos - agents, skills, commands e AGENTS.md. Sem MCP e sem infra."
     Write-Host "  2) Leve        - arquivos + spec-workflow (planejamento). Nada pra instalar na maquina."
-    Write-Host "  3) Completo    - leve + Serena + memoria Qdrant + settings.json do Claude"
+    Write-Host "  3) Completo    - leve + Serena + settings.json do Claude"
     Write-Host "  4) Sob medida  - escolho os MCPs e quais agents/skills/commands"
     $pr = Read-Host "Escolha [3]"
     switch ($pr) {
@@ -452,7 +442,7 @@ if (-not $Preset) { $Preset = 'custom' }   # veio so -Mcp/-Parts: parte dos defa
 switch ($Preset) {
   'files' { $defMcp = '';                            $defParts = 'agents,commands,skills' }
   'lite'  { $defMcp = 'spec-workflow';               $defParts = 'agents,commands,skills' }
-  default { $defMcp = 'spec-workflow,serena,memory'; $defParts = 'agents,commands,skills,settings' }
+  default { $defMcp = 'spec-workflow,serena'; $defParts = 'agents,commands,skills,settings' }
 }
 
 if ($askCustom) {
@@ -461,7 +451,6 @@ if ($askCustom) {
     Write-Host "`nQuais MCPs? (virgula; enter = nenhum)" -ForegroundColor White
     Write-Host "  1) spec-workflow - planejamento (npx, nada a instalar)"
     Write-Host "  2) serena        - navegacao semantica do codigo (precisa de uv)"
-    Write-Host "  3) memory        - memoria vetorial Qdrant (precisa de Qdrant local ou VPS)"
     $McpCsv = Read-Host ">"; $mcpSet = $true
   }
   if (-not $partsSet) {
@@ -499,81 +488,19 @@ foreach ($pair in @(@('skills', $SkillsCsv), @('agents', $SubagentsCsv), @('comm
 }
 $hasSpec   = Test-Csv $McpCsv 'spec-workflow'
 $hasSerena = Test-Csv $McpCsv 'serena'
-$hasMemory = Test-Csv $McpCsv 'memory'
 
 # ---------- pre-requisitos da maquina (opt-in; so pergunta o que faz sentido pro que foi escolhido) ----------
-$doInfra = if ($Infra) { $true } elseif ($NoInfra -or $Yes -or -not $hasMemory) { $false } else {
-  Write-Host "`nMontar o local-infra (stack global da maquina)?" -ForegroundColor White
-  Write-Host "  Stack Docker unico (Postgres + Redis + Qdrant + tunnels) que sobe UMA vez e serve TODOS"
-  Write-Host "  os seus projetos. O Qdrant guarda a memoria dos agentes. Senhas aleatorias."
-  Write-Host "  (pule se ja tem, se usa Qdrant na VPS, ou se nao usa Docker)"
-  (Read-Host "  [s/N]") -match '^[sSyY]'
-}
+# O local-infra nao e mais oferecido sozinho - ele so aparecia porque o Qdrant guardava a
+# memoria, e a memoria saiu daqui. Continua disponivel via -Infra e pela skill 'local-infra'.
+$doInfra = [bool]$Infra
 $doSerena = if ($Serena) { $true } elseif ($NoSerena -or $Yes -or -not $hasSerena) { $false } else {
   Write-Host "`nInstalar o Serena (navegacao semantica do codigo)?" -ForegroundColor White
   Write-Host "  CLI no host via uv (nao e container). Necessario pro MCP 'serena' conectar."
   (Read-Host "  [s/N]") -match '^[sSyY]'
 }
 
-# ---------- modo de memoria (local vs VPS) - so se a memoria foi escolhida ----------
-$bldCfgDir = Join-Path $env:USERPROFILE '.buildison'
-$bldCfg    = Join-Path $bldCfgDir 'vps.env'
-if ($hasMemory) {
-  if (-not $Memory -or -not $QdrantUrl) {
-    if (Test-Path $bldCfg) {
-      Get-Content $bldCfg | ForEach-Object {
-        if ($_ -match '^\s*BUILDISON_MEMORY_MODE=(.+)$' -and -not $Memory)   { $Memory = $Matches[1].Trim() }
-        if ($_ -match '^\s*BUILDISON_QDRANT_URL=(.+)$'  -and -not $QdrantUrl) { $QdrantUrl = $Matches[1].Trim() }
-      }
-    }
-  }
-  if (-not $Memory) {
-    if ($Yes) { $Memory = 'local' } else {
-      Write-Host "`nOnde fica a memoria (Qdrant) deste e dos proximos projetos desta maquina?" -ForegroundColor White
-      Write-Host "  1) Local - http://localhost:6333 (do ~/local-infra). Simples; memoria so nesta maquina."
-      Write-Host "  2) VPS   - HTTPS publico com api-key. Memoria segue voce entre maquinas."
-      Write-Host "  (essa escolha e salva em $bldCfg e vale pra novos projetos.)"
-      $mm = Read-Host "Escolha [1]"
-      $Memory = if ($mm -eq '2') { 'vps' } else { 'local' }
-    }
-  }
-  if ($Memory -eq 'vps' -and -not $QdrantUrl) {
-    if ($Yes) { Die '-Memory vps requer -QdrantUrl <URL> em modo -Yes.' }
-    $QdrantUrl = Read-Host "URL do Qdrant na VPS (ex: https://qdrant.seu-dominio.com)"
-    if (-not $QdrantUrl) { Die 'URL vazia.' }
-  }
-  New-Dir $bldCfgDir
-  Write-Utf8 $bldCfg ("# Config per-maquina do buildison - apague o arquivo pra ser perguntado de novo.`nBUILDISON_MEMORY_MODE=$Memory`nBUILDISON_QDRANT_URL=$QdrantUrl`n")
-  Ok "Config per-maquina: $bldCfg"
-}
-if (-not $Memory) { $Memory = 'local' }
-
-$qUrl = if ($Memory -eq 'vps') { $QdrantUrl } else { 'http://localhost:6333' }
-# collection do Qdrant derivada do nome do projeto
-$projName = (Split-Path $Target -Leaf).ToLower() -replace '[^a-z0-9_]', '_'
-if (-not $projName) { $projName = 'project_main' }
-$collection = "agent_$projName"
-# Num -Update, respeita a collection que ja esta no .mcp.json (pode ter sido ajustada a mao)
-if ($hasMemory -and $Update -and (Test-Path (Join-Path $Target '.mcp.json'))) {
-  try {
-    $prev = (Get-Content -Raw (Join-Path $Target '.mcp.json') | ConvertFrom-Json).mcpServers.'qdrant-memory'.env.COLLECTION_NAME
-    if ($prev -and $prev -ne $collection) { Warn "mantendo collection existente: $prev (derivada seria $collection)"; $collection = $prev }
-  } catch { }
-}
-if ($hasMemory) { Info "Memoria: $Memory ($qUrl) | collection $collection" }
-$qEnvPairs = @("`"QDRANT_URL`": `"$qUrl`"")
-if ($Memory -eq 'vps') { $qEnvPairs += '"QDRANT_API_KEY": "${QDRANT_API_KEY}"' }
-$qEnvPairs += "`"COLLECTION_NAME`": `"$collection`""
-$qEnvPairs += "`"EMBEDDING_MODEL`": `"$Embed`""
-$qEnvJson = '{ ' + ($qEnvPairs -join ', ') + ' }'
-
-# ---------- tags: o que existe neste projeto (filtra AGENTS.md, templates e itens) ----------
-$Tags = @()
-if ($hasSpec)   { $Tags += 'spec' }
-if ($hasSerena) { $Tags += 'serena' }
-if ($hasMemory) { $Tags += 'memory' }
 if ($McpCsv)    { $Tags += 'mcp' }
-if ($Preset -eq 'full' -or $doInfra -or ($hasMemory -and $Memory -eq 'local')) { $Tags += 'infra' }
+if ($Preset -eq 'full' -or $doInfra) { $Tags += 'infra' }
 
 $mcpLabel = if ($McpCsv) { $McpCsv } else { 'nenhum' }
 Info "Instalando: preset $Preset | MCP: $mcpLabel | partes: $PartsCsv"
@@ -646,7 +573,6 @@ if ($selClaude) {
     $entries = @()
     if ($hasSpec)   { $entries += '    "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] }' }
     if ($hasSerena) { $entries += '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }' }
-    if ($hasMemory) { $entries += "    `"qdrant-memory`": {`n      `"command`": `"uvx`",`n      `"args`": [`"mcp-server-qdrant`"],`n      `"env`": $qEnvJson`n    }" }
     Write-Utf8 (Join-Path $Target '.mcp.json') ("{`n  `"mcpServers`": {`n" + ($entries -join ",`n") + "`n  }`n}`n")
     Ok ".mcp.json ($McpCsv)"
   } else {
@@ -675,7 +601,6 @@ if ($selOpencode) {
     $entries = @()
     if ($hasSpec)   { $entries += '    "spec-workflow": { "type": "local", "command": ["npx", "-y", "@pimzino/spec-workflow-mcp@latest", "."], "enabled": true }' }
     if ($hasSerena) { $entries += '    "serena": { "type": "local", "command": ["serena", "start-mcp-server", "--context", "ide", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"], "enabled": true }' }
-    if ($hasMemory) { $entries += "    `"qdrant-memory`": {`n      `"type`": `"local`",`n      `"command`": [`"uvx`", `"mcp-server-qdrant`"],`n      `"environment`": $qEnvJson,`n      `"enabled`": true`n    }" }
     $oc = "{`n  `"`$schema`": `"https://opencode.ai/config.json`",`n  `"mcp`": {`n" + ($entries -join ",`n") + "`n  }`n}`n"
     $ocCfg = Join-Path $Target 'opencode.json'
     if ((Test-Path $ocCfg) -and -not $Force) {
@@ -687,7 +612,7 @@ if ($selOpencode) {
 }
 
 # ---------- Antigravity (Google) - AGENTS.md nativo + .agents/ + MCP global ----------
-# Config GLOBAL (nao por-projeto): usa caminho ABSOLUTO do projeto + a collection deste projeto.
+# Config GLOBAL (nao por-projeto): usa caminho ABSOLUTO do projeto.
 # Windows: ~/.gemini/antigravity/mcp_config.json  (fallback ~/.gemini/config/mcp_config.json).
 if ($selAntigravity) {
   Info "Configurando Antigravity..."
@@ -732,13 +657,6 @@ if ($selAntigravity) {
     }
     if ($hasSerena) {
       $agObj.mcpServers | Add-Member -NotePropertyName 'serena' -Force -NotePropertyValue ([pscustomobject][ordered]@{ command = 'serena'; args = @('start-mcp-server', '--context', 'ide-assistant', '--project', $Target, '--enable-web-dashboard', 'false', '--open-web-dashboard', 'false', '--enable-gui-log-window', 'false') })
-    }
-    if ($hasMemory) {
-      $agEnv = [ordered]@{ QDRANT_URL = $qUrl }
-      if ($Memory -eq 'vps') { $agEnv['QDRANT_API_KEY'] = '${QDRANT_API_KEY}' }
-      $agEnv['COLLECTION_NAME'] = $collection
-      $agEnv['EMBEDDING_MODEL'] = $Embed
-      $agObj.mcpServers | Add-Member -NotePropertyName 'qdrant-memory' -Force -NotePropertyValue ([pscustomobject][ordered]@{ command = 'uvx'; args = @('mcp-server-qdrant'); env = [pscustomobject]$agEnv })
     }
     Write-Utf8 $agCfg (($agObj | ConvertTo-Json -Depth 16) + "`n")
     Ok "Antigravity: MCP em $agCfg ($McpCsv)"
@@ -873,23 +791,8 @@ if ($infraPass) {
   Write-Host "  Postgres senha: $infraPass"
   Write-Host "  (em ~/local-infra/.env | conn: postgresql://dev:$infraPass@localhost:5432/<db>)"
 }
-if ($hasMemory -and $Memory -eq 'vps') {
-  Write-Host "`nMemoria: VPS ($qUrl)" -ForegroundColor White
-  Write-Host "  O .mcp.json usa `${QDRANT_API_KEY} (expandida do AMBIENTE do shell que abre o claude)."
-  Write-Host "  Exporte a key UMA vez antes de rodar:"
-  Write-Host "    `$env:QDRANT_API_KEY = '<sua-api-key>'     # por sessao (PowerShell)"
-  Write-Host "    [Environment]::SetEnvironmentVariable('QDRANT_API_KEY','<sua-api-key>','User')  # persistente"
-  Write-Host "  Doc: docs/infra/qdrant-vps-template.md (no buildison)"
-}
 $steps = New-Object System.Collections.Generic.List[string]
-if ($hasMemory) {
-  if ($Memory -eq 'local') {
-    if ($doInfra) { $steps.Add("Subir infra:  cd `$HOME\local-infra; docker compose up -d") }
-    else          { $steps.Add("Infra (se ainda nao tem): rode de novo com -Infra, ou suba seu ~/local-infra") }
-  } else {
-    $steps.Add("Garanta que a VPS Qdrant esta no ar (HTTPS) e QDRANT_API_KEY exportada")
-  }
-}
+if ($doInfra) { $steps.Add("Subir infra:  cd `$HOME\local-infra; docker compose up -d") }
 if ($hasSerena -and -not $doSerena) { $steps.Add("Serena: uv tool install -p 3.13 serena-agent; serena init") }
 if ($selClaude) {
   if ($McpCsv) { $steps.Add("Claude:      abra o projeto e rode /mcp pra aprovar os servidores") }
