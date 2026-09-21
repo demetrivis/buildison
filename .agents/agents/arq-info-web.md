@@ -33,7 +33,9 @@ na tela e na rede.
 - **No Claude Code:** o MCP `chrome-devtools` — `navigate_page`, `take_snapshot`,
   `take_screenshot`, `list_network_requests`, `get_network_request`,
   `list_console_messages`, `evaluate_script` (só leitura de DOM). Para escrever a pasta,
-  use Write/Edit.
+  use Write/Edit. Se o MCP roda com `--isolated` (o padrão do buildison, pra duas sessões não
+  disputarem o mesmo Chrome), cada sessão começa **deslogada**: peça pro usuário logar no alvo
+  quando o browser abrir, ou que ele configure `--autoConnect` pra usar o Chrome dele já logado.
 - **No Antigravity (IDE do Google):** as ferramentas de browser/devtools embutidas
   equivalentes (navegar, snapshot/DOM, screenshot, inspecionar a aba Network).
 - Para localizar padrões e nomear entidades com consistência, reaproveite os **templates de

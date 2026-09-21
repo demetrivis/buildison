@@ -15,7 +15,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files
 #
 # Sob medida (partem do preset e sobrescrevem só o que você passar):
-#   --mcp <lista|none>    spec-workflow, serena
+#   --mcp <lista|none>    spec-workflow, serena, chrome-devtools (sempre com --isolated)
 #   --parts <lista>       agents, commands, skills, settings (.claude/settings.json: permissões + plugins)
 #   --skills <lista>      só estas skills      ─┐ default: todos, menos os que dependem de uma peça
 #   --subagents <lista>   só estes agents       │ que não foi instalada (ex.: skill spec-workflow
@@ -324,6 +324,7 @@ if [ "$LIST" -eq 1 ]; then
   printf "${c_bold}MCPs${c_reset} (--mcp, ou none)\n"
   echo "  spec-workflow  planejamento requirements → design → tasks (npx, nada a instalar)"
   echo "  serena         navegação semântica do código (precisa de uv + serena)"
+  echo "  chrome-devtools  browser pro agente (npx; sempre --isolated: um Chrome por sessão)"
   echo ""
   printf "${c_bold}Partes${c_reset} (--parts): agents commands skills settings\n\n"
   printf "${c_bold}Agents${c_reset} (--subagents):  %s\n" "$(item_names agents)"
@@ -468,9 +469,10 @@ if [ "$ASK_CUSTOM" -eq 1 ]; then
     echo ""
     printf "${c_bold}Quais MCPs?${c_reset} (vírgula; enter = nenhum)\n"
     printf "  1) spec-workflow — planejamento (npx, nada a instalar)\n"
-    printf "  2) serena        — navegação semântica do código (precisa de uv)\n> "
+    printf "  2) serena        — navegação semântica do código (precisa de uv)\n"
+    printf "  3) chrome-devtools — browser pro agente (npx, isolado: um Chrome por sessão)\n> "
     r=""; prompt_read r
-    MCP_CSV="$(printf '%s' "$r" | sed 's/1/spec-workflow/g; s/2/serena/g')"; MCP_SET=1
+    MCP_CSV="$(printf '%s' "$r" | sed 's/1/spec-workflow/g; s/2/serena/g; s/3/chrome-devtools/g')"; MCP_SET=1
   fi
   if [ "$PARTS_SET" -eq 0 ]; then
     echo ""
@@ -501,10 +503,11 @@ norm_mcp() {
     case "$x" in
       spec|spec-workflow|specworkflow)            x=spec-workflow;;
       serena)                                     ;;
+      chrome-devtools|devtools|chrome)            x=chrome-devtools;;
       none|nenhum)                                continue;;
       memory|memoria|memória|qdrant|qdrant-memory)
         die "--mcp memory saiu do instalador: a memória Qdrant virou a skill 'qdrant-setup' (command /qdrant).";;
-      *) die "--mcp: '$x' desconhecido (use spec-workflow, serena ou none)";;
+      *) die "--mcp: '$x' desconhecido (use spec-workflow, serena, chrome-devtools ou none)";;
     esac
     csv_has "$out" "$x" || out="${out:+$out,}$x"
   done
@@ -552,9 +555,10 @@ check_names skills   "$SKILLS_CSV"
 check_names agents   "$SUBAGENTS_CSV"
 check_names commands "$COMMANDS_CSV"
 
-HAS_SPEC=0; HAS_SERENA=0
-if csv_has "$MCP_CSV" spec-workflow; then HAS_SPEC=1; fi
-if csv_has "$MCP_CSV" serena;        then HAS_SERENA=1; fi
+HAS_SPEC=0; HAS_SERENA=0; HAS_DEVTOOLS=0
+if csv_has "$MCP_CSV" spec-workflow;   then HAS_SPEC=1; fi
+if csv_has "$MCP_CSV" serena;          then HAS_SERENA=1; fi
+if csv_has "$MCP_CSV" chrome-devtools; then HAS_DEVTOOLS=1; fi
 
 # ---------- pré-requisitos da máquina (uma vez por máquina, opt-in) ----------
 # Só pergunta o que faz sentido pro que foi escolhido: sem serena não instala serena.
@@ -627,6 +631,8 @@ codex_table() {
       printf '[mcp_servers.spec-workflow]\ncommand = "npx"\nargs = ["-y", "@pimzino/spec-workflow-mcp@latest", "."]\n';;
     serena)
       printf '[mcp_servers.serena]\ncommand = "serena"\nargs = ["start-mcp-server", "--context", "codex", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"]\n';;
+    chrome-devtools)
+      printf '[mcp_servers.chrome-devtools]\ncommand = "npx"\nargs = [%s]\n' '"-y", "chrome-devtools-mcp@latest", "--isolated"';;
   esac
 }
 # tabelas ([a.b], não [[array]]) declaradas mais de uma vez
@@ -687,6 +693,7 @@ codex_write_mcp() {
   fi
   if [ "$HAS_SPEC" -eq 1 ];   then want="$want spec-workflow"; fi
   if [ "$HAS_SERENA" -eq 1 ]; then want="$want serena"; fi
+  if [ "$HAS_DEVTOOLS" -eq 1 ]; then want="$want chrome-devtools"; fi
   # O config é de TODOS os projetos: o que um install anterior pôs no bloco e este não pediu
   # continua lá (um projeto "lite" não desliga a memória que outro projeto usa).
   # Varre o bloco INTEIRO, não só o trio do buildison: quem edita o ~/.codex/config.toml à mão
@@ -803,10 +810,89 @@ global_put() { # origem  pasta-destino → 0 instalou · 1 pulou (item seu). Usa
   echo "$dst" >> "$new"
   return 0
 }
+devtools_unisolated() { # [projeto] → onde o chrome-devtools-mcp roda SEM isolamento (1 por linha)
+  # Sem --isolated, todo chrome-devtools-mcp usa o MESMO perfil (~/.cache/chrome-devtools-mcp/
+  # chrome-profile). Duas sessões ao mesmo tempo — dois Claudes, Claude + Antigravity — e a segunda
+  # falha com "browser is already running". --browserUrl/--wsEndpoint/--autoConnect também escapam:
+  # conectam num Chrome que já existe em vez de abrir outro.
+  local py; py="$(find_python || true)"; [ -n "$py" ] || return 0
+  "$py" - "$HOME" "${1:-}" <<'PYDT' || true
+import json, os, re, sys
+home, proj = sys.argv[1], sys.argv[2]
+SAFE = ("--isolated", "--browserUrl", "--browser-url", "-u", "--wsEndpoint", "--ws-endpoint", "-w",
+        "--autoConnect", "--auto-connect")
+def unsafe(words):
+    words = [w for w in words if isinstance(w, str)]
+    if not any("chrome-devtools-mcp" in w for w in words):
+        return False
+    return not any(w == f or w.startswith(f + "=") for w in words for f in SAFE)
+def load(p):
+    try:
+        return json.load(open(p))
+    except Exception:
+        return None
+def scan(label, servers):
+    for name, sv in (servers or {}).items():
+        if not isinstance(sv, dict):
+            continue
+        cmd = sv.get("command")
+        words = (cmd if isinstance(cmd, list) else [cmd]) + list(sv.get("args") or [])
+        if unsafe(words):
+            print(f"{label} → {name}")
+cj = load(os.path.join(home, ".claude.json")) or {}
+scan("~/.claude.json (escopo user do Claude)", cj.get("mcpServers"))
+if proj:
+    scan(f"~/.claude.json (escopo local de {proj})", ((cj.get("projects") or {}).get(proj) or {}).get("mcpServers"))
+    scan(f"{proj}/.mcp.json", (load(os.path.join(proj, ".mcp.json")) or {}).get("mcpServers"))
+    scan(f"{proj}/.agents/mcp_config.json", (load(os.path.join(proj, ".agents/mcp_config.json")) or {}).get("mcpServers"))
+    scan(f"{proj}/opencode.json", (load(os.path.join(proj, "opencode.json")) or {}).get("mcp"))
+for c in (".gemini/config/mcp_config.json", ".gemini/antigravity/mcp_config.json"):
+    scan(f"~/{c} (global do Antigravity)", (load(os.path.join(home, c)) or {}).get("mcpServers"))
+toml = os.path.join(home, ".codex/config.toml")
+if os.path.exists(toml):
+    # sem tomllib no python 3.9: separa por tabela e procura nos args de cada uma
+    for m in re.finditer(r"^\[mcp_servers\.([^\]\s.]+)\]\s*$(.*?)(?=^\[|\Z)", open(toml).read(), re.M | re.S):
+        if unsafe(re.findall(r'"([^"]*)"', m.group(2))):
+            print(f"~/.codex/config.toml → {m.group(1)}")
+PYDT
+}
+devtools_warn() { # [projeto]
+  local hits; hits="$(devtools_unisolated "${1:-}")"
+  [ -n "$hits" ] || return 0
+  echo ""
+  warn "chrome-devtools-mcp SEM --isolated — duas sessões ao mesmo tempo disputam o mesmo perfil do Chrome e a segunda falha:"
+  printf '%s\n' "$hits" | sed 's/^/    /'
+  warn "Acrescente \"--isolated\" nos args (ou reinstale com --mcp chrome-devtools, que já vem isolado)."
+}
+global_claude_mcp() { # nome  quer(0|1)  comando... → põe/tira o MCP no escopo USER do Claude Code
+  # Usa old/new do install_global. Só tira o que o --global pôs (manifest): um MCP que você
+  # registrou à mão fica.
+  local name="$1" want_it="$2"; shift 2
+  if [ "$want_it" -eq 1 ]; then
+    if claude_user_mcp_has "$name"; then
+      ok "Claude: MCP $name já está no escopo user — mantido"
+      if grep -qxF "mcp:claude:$name" "$old"; then echo "mcp:claude:$name" >> "$new"; fi
+    elif ! command -v claude >/dev/null 2>&1; then
+      warn "Claude: CLI 'claude' não está no PATH — MCP não registrado. Rode: claude mcp add -s user $name -- $*"
+    elif (cd "$HOME" && claude mcp add -s user "$name" -- "$@") >/dev/null 2>&1; then
+      ok "Claude: MCP $name no escopo user (vale em todo projeto)"
+      echo "mcp:claude:$name" >> "$new"
+    else
+      warn "Claude: falhou registrar o MCP. Rode: claude mcp add -s user $name -- $*"
+    fi
+  elif grep -qxF "mcp:claude:$name" "$old"; then
+    if command -v claude >/dev/null 2>&1 && (cd "$HOME" && claude mcp remove -s user "$name") >/dev/null 2>&1; then
+      ok "Claude: MCP $name removido do escopo user (saiu da seleção)"
+    else
+      warn "Claude: não consegui remover o MCP. Rode: claude mcp remove -s user $name"
+      echo "mcp:claude:$name" >> "$new"
+    fi
+  fi
+}
 install_global() {
   local old="$WORK/global.old" new="$WORK/global.new" root part item name dst base n moved=0 bak="" agents=""
   local plug proot left py plugs_ok=""
-  local spec_cmd="npx -y @pimzino/spec-workflow-mcp@latest ."
+  local want_it
   mkdir -p "$GLOBAL_DIR"
   : > "$new"
   if [ -f "$GLOBAL_MAN" ]; then cp "$GLOBAL_MAN" "$old"; else : > "$old"; fi
@@ -898,39 +984,22 @@ PYREW
   done < "$old"
   if [ "$moved" -gt 0 ]; then warn "$moved item(ns) que o buildison tinha posto no global saíram da seleção — movidos pra ${bak/#$HOME/~}"; fi
 
-  # ---- MCP spec-workflow: só na versão "com" ----
+  # ---- MCP no escopo user do Claude: spec-workflow (versão "com") e chrome-devtools (se pedido) ----
   if [ "$SEL_CLAUDE" -eq 1 ]; then
-    if [ "$HAS_SPEC" -eq 1 ]; then
-      if claude_user_mcp_has spec-workflow; then
-        ok "Claude: MCP spec-workflow já está no escopo user — mantido"
-        if grep -qxF "mcp:claude:spec-workflow" "$old"; then echo "mcp:claude:spec-workflow" >> "$new"; fi
-      elif ! command -v claude >/dev/null 2>&1; then
-        warn "Claude: CLI 'claude' não está no PATH — MCP não registrado. Rode: claude mcp add -s user spec-workflow -- $spec_cmd"
-      elif (cd "$HOME" && claude mcp add -s user spec-workflow -- $spec_cmd) >/dev/null 2>&1; then
-        ok "Claude: MCP spec-workflow no escopo user (vale em todo projeto)"
-        echo "mcp:claude:spec-workflow" >> "$new"
-      else
-        warn "Claude: falhou registrar o MCP. Rode: claude mcp add -s user spec-workflow -- $spec_cmd"
-      fi
-    elif grep -qxF "mcp:claude:spec-workflow" "$old"; then
-      # só tira se foi o --global que pôs: um spec-workflow que você registrou à mão fica
-      if command -v claude >/dev/null 2>&1 && (cd "$HOME" && claude mcp remove -s user spec-workflow) >/dev/null 2>&1; then
-        ok "Claude: MCP spec-workflow removido do escopo user (versão sem spec-workflow)"
-      else
-        warn "Claude: não consegui remover o MCP. Rode: claude mcp remove -s user spec-workflow"
-        echo "mcp:claude:spec-workflow" >> "$new"
-      fi
-    fi
+    global_claude_mcp spec-workflow "$HAS_SPEC" npx -y @pimzino/spec-workflow-mcp@latest .
+    global_claude_mcp chrome-devtools "$HAS_DEVTOOLS" npx -y chrome-devtools-mcp@latest --isolated
   fi
   if [ "$SEL_CODEX" -eq 1 ]; then
-    if [ "$HAS_SPEC" -eq 1 ]; then
-      codex_write_mcp
-      echo "mcp:codex:spec-workflow" >> "$new"
-    elif grep -qxF "mcp:codex:spec-workflow" "$old"; then
-      # o ~/.codex/config.toml é o mesmo que os installs por projeto usam: tirar daqui quebraria
-      # projeto que conta com ele. Fica, e você decide.
-      info "Codex: o spec-workflow continua no ~/.codex/config.toml (config compartilhada com projetos) — tire à mão se quiser"
-    fi
+    if [ "$HAS_SPEC" -eq 1 ] || [ "$HAS_DEVTOOLS" -eq 1 ]; then codex_write_mcp; fi
+    for plug in spec-workflow chrome-devtools; do
+      case "$plug" in spec-workflow) want_it="$HAS_SPEC";; *) want_it="$HAS_DEVTOOLS";; esac
+      if [ "$want_it" -eq 1 ]; then echo "mcp:codex:$plug" >> "$new"
+      elif grep -qxF "mcp:codex:$plug" "$old"; then
+        # o ~/.codex/config.toml é o mesmo que os installs por projeto usam: tirar daqui quebraria
+        # projeto que conta com ele. Fica, e você decide.
+        info "Codex: o $plug continua no ~/.codex/config.toml (config compartilhada com projetos) — tire à mão se quiser"
+      fi
+    done
   fi
 
   cp "$new" "$GLOBAL_MAN"
@@ -952,6 +1021,7 @@ EOFCFG
 
   echo ""
   if [ "$CODEX_FAILED" -eq 1 ]; then warn "Codex NÃO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo."; fi
+  devtools_warn
   ok "Global instalado (${agents}) — versão $( [ "$HAS_SPEC" -eq 1 ] && echo com || echo sem ) spec-workflow${plugs_ok:+ · + skills de plugin no Codex: $plugs_ok}"
   echo ""
   printf "${c_bold}Próximos passos:${c_reset}\n"
@@ -1110,6 +1180,9 @@ if [ "$SEL_CLAUDE" -eq 1 ]; then
     if [ "$HAS_SERENA" -eq 1 ]; then
       add_entry '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }'
     fi
+    if [ "$HAS_DEVTOOLS" -eq 1 ]; then
+      add_entry '    "chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"] }'
+    fi
     merge_mcp_json "$TARGET_DIR/.mcp.json" mcpServers \
       "$(printf '{\n  "mcpServers": {\n%s\n  }\n}\n' "$ENTRIES")" "spec-workflow,serena"
     ok ".mcp.json (${MCP_CSV})"
@@ -1142,6 +1215,9 @@ if [ "$SEL_OPENCODE" -eq 1 ]; then
     fi
     if [ "$HAS_SERENA" -eq 1 ]; then
       add_entry '    "serena": { "type": "local", "command": ["serena", "start-mcp-server", "--context", "ide", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"], "enabled": true }'
+    fi
+    if [ "$HAS_DEVTOOLS" -eq 1 ]; then
+      add_entry '    "chrome-devtools": { "type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest", "--isolated"], "enabled": true }'
     fi
     OC_JSON="$(printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {\n%s\n  }\n}' "$ENTRIES")"
     if [ -e "$OC_CFG" ] && [ "$FORCE" -eq 0 ]; then
@@ -1231,6 +1307,9 @@ if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
     if [ "$HAS_SERENA" -eq 1 ]; then
       add_entry '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }'
     fi
+    if [ "$HAS_DEVTOOLS" -eq 1 ]; then
+      add_entry '    "chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"] }'
+    fi
     mkdir -p "$TARGET_DIR/.agents"
     merge_mcp_json "$TARGET_DIR/.agents/mcp_config.json" mcpServers \
       "$(printf '{\n  "mcpServers": {\n%s\n  }\n}\n' "$ENTRIES")" "spec-workflow,serena"
@@ -1268,6 +1347,7 @@ ok "Instalação concluída em $TARGET_DIR (preset $PRESET · MCP: ${MCP_CSV:-ne
 if [ "$CODEX_FAILED" -eq 1 ]; then
   warn "Codex NÃO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo."
 fi
+devtools_warn "$TARGET_DIR"
 
 if [ -n "$INFRA_PGPASS" ]; then
   echo ""

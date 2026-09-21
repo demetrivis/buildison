@@ -141,6 +141,24 @@ curl -s -H "api-key: $KEY" "$DST/collections/$COLL" | jq .result.points_count
 
 Inverter origem/destino pra migrar VPS → local. Sempre confirmar a contagem final.
 
+### "chrome-devtools: The browser is already running" / o browser não abre na 2ª sessão
+
+Without `--isolated`, every `chrome-devtools-mcp` uses the SAME Chrome profile
+(`~/.cache/chrome-devtools-mcp/chrome-profile`). Two sessions at once — two Claudes, or Claude +
+Antigravity — and the second one fails because the profile is locked.
+
+```bash
+# where is it configured without isolation? (the installer prints the same list at the end)
+grep -n "chrome-devtools-mcp" ~/.claude.json .mcp.json .agents/mcp_config.json ~/.codex/config.toml \
+  ~/.gemini/config/mcp_config.json 2>/dev/null
+```
+
+Fix: add `"--isolated"` to the args of each entry (temporary profile per session, deleted on close),
+close the Chrome left open by the old session, restart the agent. `--browserUrl`/`--autoConnect` also
+avoid it (they attach to a running Chrome). Reinstalling with `--mcp chrome-devtools` writes it isolated.
+Trade-off: `--isolated` starts logged OUT every session — for sites that need login, prefer
+`--autoConnect` (your own Chrome, Chrome 144+, remote debugging on) over dropping isolation.
+
 ### "Como verifico que tudo está OK?"
 
 ```bash

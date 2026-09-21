@@ -16,6 +16,28 @@ Formato por entrada:
 
 ---
 
+## 2026-09-21 — `--mcp chrome-devtools`, sempre com `--isolated`, e aviso dos que não estão
+
+**Contexto:** ao subir o `chrome-devtools-mcp` num projeto, o usuário bateu no conflito de perfil: sem
+`--isolated`, todo servidor usa `~/.cache/chrome-devtools-mcp/chrome-profile`, e a segunda sessão
+simultânea (outro Claude, ou Claude + Antigravity) falha porque o perfil está travado. Outra sessão corrigiu
+à mão, com `--isolated` no escopo user do Claude. O buildison não configurava esse MCP em lugar nenhum — mas
+com duas IAs operando no mesmo projeto, o conflito tende a voltar a cada config nova.
+
+**Decisão:** `chrome-devtools` vira opção de `--mcp` (e do menu custom e do `--global`), gerado **sempre**
+com `--isolated` nos quatro agentes (`.mcp.json`, `.agents/mcp_config.json`, `opencode.json`, bloco do
+Codex). No fim de toda instalação, os dois instaladores procuram `chrome-devtools-mcp` sem isolamento —
+escopos user e local do Claude, `.mcp.json`, Antigravity (projeto e global), OpenCode e Codex — e avisam.
+`--browserUrl`, `--wsEndpoint` e `--autoConnect` contam como isolados: conectam num Chrome que já existe.
+
+**Motivo:** o instalador é o ponto onde a config nasce; se ele sempre gera isolado e aponta o que não está,
+o conflito não volta calado. Avisar em vez de corrigir sozinho segue a regra dos configs globais: o
+arquivo é do usuário.
+
+**Impacto:** `chrome-devtools` **não** entra na lista de MCPs "gerenciados" do merge — o instalador põe e
+atualiza, mas não remove um que você tenha adicionado à mão. Custo do `--isolated`: toda sessão abre
+deslogada (anotado no `arq-info-web`, que mapeia sistemas com login; alternativa: `--autoConnect`).
+
 ## 2026-09-21 — MCP do Antigravity por projeto; o global não é mais tocado
 
 **Contexto:** a decisão de 2026-07-08 gravava a toolbox MCP no config **global** do Antigravity

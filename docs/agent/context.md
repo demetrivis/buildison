@@ -109,6 +109,10 @@ Todas já morderam de verdade neste repo:
   workflows; em setembro tinha `.agents/agents/`, skills em pasta, e workflows deprecados. Antes de mexer
   no `gen-antigravity.mjs`, leia a doc atual: `https://antigravity.google/llms.txt` (e `<página>.md`). O `agy`
   local só lista agentes com login feito — sem login, `agy agents` sai com 0 e não imprime nada.
+- **`chrome-devtools-mcp` sem `--isolated` quebra com duas sessões.** Todas usam o mesmo perfil
+  (`~/.cache/chrome-devtools-mcp/chrome-profile`); a segunda sessão (outro Claude, ou o Antigravity) falha
+  com "browser is already running". Toda config que o buildison gera leva `--isolated`, e o
+  `devtools_unisolated`/`Get-DevtoolsUnisolated` avisa das que ele não gerou.
 - **O bloco `# >>> buildison >>>` do Codex guarda MCP que não é do buildison** — quem edita o
   `~/.codex/config.toml` à mão põe servidor próprio lá dentro. Regravar só o trio conhecido apagava
   isso em silêncio (aconteceu com o `computer-use`). O `keep` varre o bloco inteiro; ao mexer nele,

@@ -111,7 +111,7 @@ As flags partem do preset e sobrescrevem só o que você passar:
 
 | bash | PowerShell | Valores |
 |---|---|---|
-| `--mcp` | `-Mcp` | `spec-workflow`, `serena` ou `none` |
+| `--mcp` | `-Mcp` | `spec-workflow`, `serena`, `chrome-devtools` ou `none` |
 | `--parts` | `-Parts` | `agents`, `commands`, `skills`, `settings` |
 | `--skills` | `-Skills` | só estas skills |
 | `--subagents` | `-Subagents` | só estes agents |
@@ -440,7 +440,15 @@ node scripts/gen-antigravity.mjs
 | **SpecWorkflow** | Planejamento: requirements → design → tasks |
 | **Serena** | Navegação semântica do codebase |
 | **Context7** | Docs atualizadas de libs/APIs |
-| **Qdrant** | Memória vetorial persistente (uma collection por projeto) |
+| **Qdrant** | Memória vetorial persistente (uma collection por projeto) — via `/qdrant` |
+| **Chrome DevTools** | Browser pro agente (`--mcp chrome-devtools`) — sempre com `--isolated` |
+
+O `chrome-devtools-mcp` sem `--isolated` usa **o mesmo perfil do Chrome** em toda sessão: com duas abertas
+ao mesmo tempo (dois Claudes, ou Claude + Antigravity), a segunda falha com _"The browser is already
+running"_. Por isso o instalador sempre grava com `--isolated` (um Chrome temporário por sessão) e, no fim de
+toda instalação, **avisa** onde encontrar um `chrome-devtools-mcp` sem isolamento — Claude (user, local e
+`.mcp.json`), Antigravity (projeto e global), Codex e OpenCode. O preço do `--isolated` é começar deslogado
+toda vez; pra site com login, `--autoConnect` usa o seu Chrome aberto.
 
 Pré-requisito do Serena, uma vez por máquina:
 

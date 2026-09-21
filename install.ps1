@@ -19,7 +19,7 @@ Presets (-Preset):
   custom  pergunta MCPs, partes e itens
 
 Sob medida (partem do preset e sobrescrevem so o que for passado):
-  -Mcp spec-workflow,serena | none
+  -Mcp spec-workflow,serena,chrome-devtools | none   (chrome-devtools sempre com --isolated)
   -Parts agents,commands,skills,settings
   -Skills / -Subagents / -Commands <nomes>   (default: todos, menos os que dependem de peca nao instalada)
 A escolha fica em .buildison na raiz do projeto e e reaproveitada nas proximas execucoes.
@@ -100,9 +100,10 @@ function ConvertTo-McpCsv($v) {
     $n = switch -Regex ($x.ToLower()) {
       '^(1|spec|spec-workflow|specworkflow)$'             { 'spec-workflow'; break }
       '^(2|serena)$'                                      { 'serena'; break }
+      '^(3|chrome-devtools|devtools|chrome)$'             { 'chrome-devtools'; break }
       '^(memory|memoria|qdrant|qdrant-memory)$' { Die "-Mcp memory saiu do instalador: a memoria Qdrant virou a skill 'qdrant-setup' (command /qdrant)." }
       '^(none|nenhum)$'                                   { ''; break }
-      default { Die "-Mcp: '$x' desconhecido (use spec-workflow, serena ou none)" }
+      default { Die "-Mcp: '$x' desconhecido (use spec-workflow, serena, chrome-devtools ou none)" }
     }
     if ($n -and ($out -notcontains $n)) { $out += $n }
   }
@@ -214,6 +215,9 @@ function Get-CodexTable([string]$name) {
     'serena' {
       return ('[mcp_servers.serena]', 'command = "serena"', 'args = ["start-mcp-server", "--context", "codex", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"]') -join "`n"
     }
+    'chrome-devtools' {
+      return ('[mcp_servers.chrome-devtools]', 'command = "npx"', 'args = ["-y", "chrome-devtools-mcp@latest", "--isolated"]') -join "`n"
+    }
   }
 }
 # tabelas ([a.b], nao [[array]]) declaradas mais de uma vez
@@ -272,6 +276,7 @@ function Update-CodexMcp {
   $want = @()
   if ($hasSpec)   { $want += 'spec-workflow' }
   if ($hasSerena) { $want += 'serena' }
+  if ($hasDevtools) { $want += 'chrome-devtools' }
   # O config e de TODOS os projetos: o que um install anterior pos no bloco e este nao pediu
   # continua la (um projeto "lite" nao desliga a memoria que outro projeto usa).
   # Varre o bloco INTEIRO, nao so o trio do buildison: quem edita o ~/.codex/config.toml a mao
@@ -356,6 +361,7 @@ if ($List) {
   Write-Host "`nMCPs (-Mcp, ou none)" -ForegroundColor White
   Write-Host "  spec-workflow  planejamento requirements -> design -> tasks (npx, nada a instalar)"
   Write-Host "  serena         navegacao semantica do codigo (precisa de uv + serena)"
+  Write-Host "  chrome-devtools  browser pro agente (npx; sempre --isolated: um Chrome por sessao)"
   Write-Host "`nPartes (-Parts): agents commands skills settings" -ForegroundColor White
   Write-Host ("`nAgents (-Subagents):  " + ((Get-ItemNames 'agents') -join ' '))
   Write-Host ("Skills (-Skills):     " + ((Get-ItemNames 'skills') -join ' '))
@@ -512,6 +518,7 @@ if ($askCustom) {
     Write-Host "`nQuais MCPs? (virgula; enter = nenhum)" -ForegroundColor White
     Write-Host "  1) spec-workflow - planejamento (npx, nada a instalar)"
     Write-Host "  2) serena        - navegacao semantica do codigo (precisa de uv)"
+    Write-Host "  3) chrome-devtools - browser pro agente (npx, isolado: um Chrome por sessao)"
     $McpCsv = Read-Host ">"; $mcpSet = $true
   }
   if (-not $partsSet) {
@@ -556,6 +563,7 @@ if ($Global) {
 }
 $hasSpec   = Test-Csv $McpCsv 'spec-workflow'
 $hasSerena = Test-Csv $McpCsv 'serena'
+$hasDevtools = Test-Csv $McpCsv 'chrome-devtools'
 
 # ---------- pre-requisitos da maquina (opt-in; so pergunta o que faz sentido pro que foi escolhido) ----------
 # O local-infra nao e mais oferecido sozinho - ele so aparecia porque o Qdrant guardava a
@@ -644,12 +652,83 @@ function Add-GlobalItem($item, [string]$base, $old, $new) {
   $new.Add($dst)
   return $true
 }
+function Set-GlobalClaudeMcp([string]$name, [bool]$wantIt, [string[]]$cmd, $old, $new) {
+  # Poe/tira o MCP no escopo USER do Claude Code. So tira o que o -Global pos (manifest): um MCP
+  # que voce registrou a mao fica.
+  $hasCli = [bool](Get-Command claude -ErrorAction SilentlyContinue)
+  if ($wantIt) {
+    if (Test-ClaudeUserMcp $name) {
+      Ok "Claude: MCP $name ja esta no escopo user - mantido"
+      if ($old -contains "mcp:claude:$name") { $new.Add("mcp:claude:$name") }
+    } elseif (-not $hasCli) {
+      Warn "Claude: CLI 'claude' nao esta no PATH - MCP nao registrado. Rode: claude mcp add -s user $name -- $($cmd -join ' ')"
+    } elseif (Invoke-ClaudeMcp (@('mcp', 'add', '-s', 'user', $name, '--') + $cmd)) {
+      Ok "Claude: MCP $name no escopo user (vale em todo projeto)"; $new.Add("mcp:claude:$name")
+    } else {
+      Warn "Claude: falhou registrar o MCP. Rode: claude mcp add -s user $name -- $($cmd -join ' ')"
+    }
+  } elseif ($old -contains "mcp:claude:$name") {
+    if ($hasCli -and (Invoke-ClaudeMcp @('mcp', 'remove', '-s', 'user', $name))) { Ok "Claude: MCP $name removido do escopo user (saiu da selecao)" }
+    else { Warn "Claude: nao consegui remover o MCP. Rode: claude mcp remove -s user $name"; $new.Add("mcp:claude:$name") }
+  }
+}
+# Sem --isolated, todo chrome-devtools-mcp usa o MESMO perfil do Chrome: duas sessoes ao mesmo tempo
+# (dois Claudes, Claude + Antigravity) e a segunda falha com "browser is already running".
+# --browserUrl/--wsEndpoint/--autoConnect tambem escapam: conectam num Chrome que ja existe.
+function Get-DevtoolsUnisolated([string]$proj) {
+  $safe = '^(--isolated|--browserUrl|--browser-url|-u|--wsEndpoint|--ws-endpoint|-w|--autoConnect|--auto-connect)(=.*)?$'
+  $out = @()
+  $check = {
+    param([string]$label, $servers)
+    if (-not $servers) { return }
+    foreach ($p in $servers.PSObject.Properties) {
+      $sv = $p.Value
+      $words = @(@($sv.command) + @($sv.args)) | Where-Object { $_ -is [string] }
+      if (-not ($words | Where-Object { $_ -like '*chrome-devtools-mcp*' })) { continue }
+      if ($words | Where-Object { $_ -match $safe }) { continue }
+      "$label -> $($p.Name)"
+    }
+  }
+  $load = { param([string]$f) if (Test-Path -LiteralPath $f) { try { Get-Content -Raw -LiteralPath $f | ConvertFrom-Json } catch { $null } } }
+  $cj = & $load (Join-Path $env:USERPROFILE '.claude.json')
+  if ($cj) {
+    $out += & $check '~\.claude.json (escopo user do Claude)' $cj.mcpServers
+    if ($proj -and $cj.projects) { $pj = $cj.projects.$proj; if ($pj) { $out += & $check "~\.claude.json (escopo local de $proj)" $pj.mcpServers } }
+  }
+  if ($proj) {
+    $out += & $check "$proj\.mcp.json" (& $load (Join-Path $proj '.mcp.json')).mcpServers
+    $out += & $check "$proj\.agents\mcp_config.json" (& $load (Join-Path $proj '.agents\mcp_config.json')).mcpServers
+    $out += & $check "$proj\opencode.json" (& $load (Join-Path $proj 'opencode.json')).mcp
+  }
+  foreach ($c in '.gemini\config\mcp_config.json', '.gemini\antigravity\mcp_config.json') {
+    $out += & $check "~\$c (global do Antigravity)" (& $load (Join-Path $env:USERPROFILE $c)).mcpServers
+  }
+  $toml = Join-Path $env:USERPROFILE '.codex\config.toml'
+  if (Test-Path -LiteralPath $toml) {
+    # sem parser de TOML: separa por tabela e olha os args de cada uma
+    $text = [IO.File]::ReadAllText($toml)
+    foreach ($m in [regex]::Matches($text, '(?ms)^\[mcp_servers\.([^\]\s.]+)\]\s*$(.*?)(?=^\[|\z)')) {
+      $words = @([regex]::Matches($m.Groups[2].Value, '"([^"]*)"') | ForEach-Object { $_.Groups[1].Value })
+      if (-not ($words | Where-Object { $_ -like '*chrome-devtools-mcp*' })) { continue }
+      if ($words | Where-Object { $_ -match $safe }) { continue }
+      $out += "~\.codex\config.toml -> $($m.Groups[1].Value)"
+    }
+  }
+  return $out
+}
+function Show-DevtoolsWarn([string]$proj) {
+  $hits = @(Get-DevtoolsUnisolated $proj)
+  if (-not $hits.Count) { return }
+  Write-Host ""
+  Warn 'chrome-devtools-mcp SEM --isolated - duas sessoes ao mesmo tempo disputam o mesmo perfil do Chrome e a segunda falha:'
+  foreach ($h in $hits) { Write-Host "    $h" }
+  Warn 'Acrescente "--isolated" nos args (ou reinstale com -Mcp chrome-devtools, que ja vem isolado).'
+}
 function Install-Global {
   $script:globalBak = ''
   New-Dir $globalDir
   $old = if (Test-Path -LiteralPath $globalMan) { @(Get-Content -LiteralPath $globalMan) } else { @() }
   $new = New-Object System.Collections.Generic.List[string]
-  $specCmd = @('npx', '-y', '@pimzino/spec-workflow-mcp@latest', '.')
   $roots = @(); if ($selClaude) { $roots += 'claude' }; if ($selCodex) { $roots += 'codex' }
   if ($hasSpec) { Info 'Instalando no global - versao COM spec-workflow' } else { Info 'Instalando no global - versao SEM spec-workflow' }
 
@@ -709,37 +788,22 @@ function Install-Global {
   }
   if ($moved) { Warn "$moved item(ns) que o buildison tinha posto no global sairam da selecao - movidos pra $script:globalBak" }
 
-  # ---- MCP spec-workflow: so na versao "com" ----
-  $hasClaudeCli = [bool](Get-Command claude -ErrorAction SilentlyContinue)
+  # ---- MCP no escopo user do Claude: spec-workflow (versao "com") e chrome-devtools (se pedido) ----
   if ($selClaude) {
-    if ($hasSpec) {
-      if (Test-ClaudeUserMcp 'spec-workflow') {
-        Ok 'Claude: MCP spec-workflow ja esta no escopo user - mantido'
-        if ($old -contains 'mcp:claude:spec-workflow') { $new.Add('mcp:claude:spec-workflow') }
-      } elseif (-not $hasClaudeCli) {
-        Warn "Claude: CLI 'claude' nao esta no PATH - MCP nao registrado. Rode: claude mcp add -s user spec-workflow -- $($specCmd -join ' ')"
-      } else {
-        $okAdd = Invoke-ClaudeMcp (@('mcp', 'add', '-s', 'user', 'spec-workflow', '--') + $specCmd)
-        if ($okAdd) { Ok 'Claude: MCP spec-workflow no escopo user (vale em todo projeto)'; $new.Add('mcp:claude:spec-workflow') }
-        else { Warn "Claude: falhou registrar o MCP. Rode: claude mcp add -s user spec-workflow -- $($specCmd -join ' ')" }
-      }
-    } elseif ($old -contains 'mcp:claude:spec-workflow') {
-      # so tira se foi o -Global que pos: um spec-workflow registrado a mao fica
-      $okRm = $false
-      if ($hasClaudeCli) { $okRm = Invoke-ClaudeMcp @('mcp', 'remove', '-s', 'user', 'spec-workflow') }
-      if ($okRm) { Ok 'Claude: MCP spec-workflow removido do escopo user (versao sem spec-workflow)' }
-      else { Warn 'Claude: nao consegui remover o MCP. Rode: claude mcp remove -s user spec-workflow'; $new.Add('mcp:claude:spec-workflow') }
-    }
+    Set-GlobalClaudeMcp 'spec-workflow' $hasSpec @('npx', '-y', '@pimzino/spec-workflow-mcp@latest', '.') $old $new
+    Set-GlobalClaudeMcp 'chrome-devtools' $hasDevtools @('npx', '-y', 'chrome-devtools-mcp@latest', '--isolated') $old $new
   }
   $script:codexFailed = $false
   if ($selCodex) {
-    if ($hasSpec) {
-      if (-not (Update-CodexMcp)) { $script:codexFailed = $true }
-      $new.Add('mcp:codex:spec-workflow')
-    } elseif ($old -contains 'mcp:codex:spec-workflow') {
-      # o ~/.codex/config.toml e o mesmo que os installs por projeto usam: tirar daqui quebraria
-      # projeto que conta com ele. Fica, e voce decide.
-      Info 'Codex: o spec-workflow continua no ~/.codex/config.toml (config compartilhada com projetos) - tire a mao se quiser'
+    if ($hasSpec -or $hasDevtools) { if (-not (Update-CodexMcp)) { $script:codexFailed = $true } }
+    foreach ($nm in 'spec-workflow', 'chrome-devtools') {
+      $wantIt = if ($nm -eq 'spec-workflow') { $hasSpec } else { $hasDevtools }
+      if ($wantIt) { $new.Add("mcp:codex:$nm") }
+      elseif ($old -contains "mcp:codex:$nm") {
+        # o ~/.codex/config.toml e o mesmo que os installs por projeto usam: tirar daqui quebraria
+        # projeto que conta com ele. Fica, e voce decide.
+        Info "Codex: o $nm continua no ~/.codex/config.toml (config compartilhada com projetos) - tire a mao se quiser"
+      }
     }
   }
 
@@ -761,6 +825,7 @@ function Install-Global {
   Write-Host ""
   if ($script:codexFailed) { Warn 'Codex NAO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo.' }
   $ver = if ($hasSpec) { 'com' } else { 'sem' }
+  Show-DevtoolsWarn ''
   $plugTxt = if ($plugsOk.Count) { " | + skills de plugin no Codex: $($plugsOk -join ',')" } else { '' }
   Ok "Global instalado ($($roots -join ',')) - versao $ver spec-workflow$plugTxt"
   Write-Host "`nProximos passos:" -ForegroundColor White
@@ -886,6 +951,7 @@ if ($selClaude) {
     $entries = @()
     if ($hasSpec)   { $entries += '    "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] }' }
     if ($hasSerena) { $entries += '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }' }
+    if ($hasDevtools) { $entries += '    "chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"] }' }
     Merge-McpJson (Join-Path $Target '.mcp.json') ("{`n  `"mcpServers`": {`n" + ($entries -join ",`n") + "`n  }`n}`n") @('spec-workflow', 'serena')
     Ok ".mcp.json ($McpCsv)"
   } else {
@@ -914,6 +980,7 @@ if ($selOpencode) {
     $entries = @()
     if ($hasSpec)   { $entries += '    "spec-workflow": { "type": "local", "command": ["npx", "-y", "@pimzino/spec-workflow-mcp@latest", "."], "enabled": true }' }
     if ($hasSerena) { $entries += '    "serena": { "type": "local", "command": ["serena", "start-mcp-server", "--context", "ide", "--project-from-cwd", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"], "enabled": true }' }
+    if ($hasDevtools) { $entries += '    "chrome-devtools": { "type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest", "--isolated"], "enabled": true }' }
     $oc = "{`n  `"`$schema`": `"https://opencode.ai/config.json`",`n  `"mcp`": {`n" + ($entries -join ",`n") + "`n  }`n}`n"
     $ocCfg = Join-Path $Target 'opencode.json'
     if ((Test-Path $ocCfg) -and -not $Force) {
@@ -975,6 +1042,7 @@ if ($selAntigravity) {
     $entries = @()
     if ($hasSpec)   { $entries += '    "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] }' }
     if ($hasSerena) { $entries += '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }' }
+    if ($hasDevtools) { $entries += '    "chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"] }' }
     Merge-McpJson (Join-Path $Target '.agents\mcp_config.json') ("{`n  `"mcpServers`": {`n" + ($entries -join ",`n") + "`n  }`n}`n") @('spec-workflow', 'serena')
     Ok "Antigravity: MCP em .agents\mcp_config.json ($McpCsv) - so neste projeto"
   }
@@ -1108,6 +1176,7 @@ if ($doSerena) {
 Write-Host ""
 Ok "Instalacao concluida em $Target (preset $Preset | MCP: $mcpLabel)"
 if ($codexFailed) { Warn "Codex NAO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo." }
+Show-DevtoolsWarn $Target
 if ($infraPass) {
   Write-Host "`nlocal-infra criado - guarde a credencial:" -ForegroundColor White
   Write-Host "  Postgres user: dev"
