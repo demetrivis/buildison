@@ -58,6 +58,13 @@ O mesmo vale pro `scripts/qdrant-mcp.py` da skill `qdrant-setup`: ele escreve no
 **O instalador não configura Qdrant.** Memória vetorial é opt-in pela skill `qdrant-setup` (command
 `/qdrant`). O installer só emite `spec-workflow` e `serena`.
 
+**Dois destinos:** projeto (default) ou `--global` (`~/.claude/{agents,commands,skills}` pro Claude,
+`~/.agents/skills` pro Codex). O global tem só duas versões — `--preset files` (sem spec-workflow) e
+`--preset lite` (com, via `claude mcp add -s user` + `~/.codex/config.toml`). Ele é governado por um
+**manifest** (`~/.buildison/global.manifest`): só o que está listado ali é sobrescrito ou retirado; o
+resto em `~/.claude` é do usuário. Por isso **caminho de skill em agent/skill nunca é só
+`.claude/skills/...`** — diga também onde fica no global, ou use a pasta da própria skill.
+
 ## Convenções específicas
 
 - `--update` atualiza boilerplate. **`--force` NÃO é modo de atualização** — ele apaga `context.md` e `decisions.md`
@@ -84,6 +91,12 @@ Todas já morderam de verdade neste repo:
 - **Python do sistema é 3.9** — sem `tomllib`. Validar TOML com `uvx --python 3.12 python -c "import tomllib..."`.
 - **`glob("**")` do Python não desce em diretório oculto** — `.claude/worktrees/*` passa batido em varredura.
 - **Traefik não pede cert pra router criado depois que subiu** — exige `service update --force`, e não loga erro.
+- **Fatiar o instalador por marcadores leva o que está no meio.** O refactor do Qdrant cortou do
+  `install.ps1` de um marcador até outro e levou junto o `$Tags = @()`: no Windows as tags viraram a
+  string `"mcpinfra"` e todo `-contains` passou a dar falso, sem erro (não há StrictMode). Depois de
+  cortar bloco, rode `git diff` e leia **todas** as linhas `-`, não só as que você esperava.
+- **O `install.ps1` não tem como ser executado nesta máquina** (sem `pwsh`). Mudança nele é revisada,
+  não testada — diga isso explicitamente ao entregar.
 - **O bloco `# >>> buildison >>>` do Codex guarda MCP que não é do buildison** — quem edita o
   `~/.codex/config.toml` à mão põe servidor próprio lá dentro. Regravar só o trio conhecido apagava
   isso em silêncio (aconteceu com o `computer-use`). O `keep` varre o bloco inteiro; ao mexer nele,

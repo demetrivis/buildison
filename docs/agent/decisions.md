@@ -16,6 +16,32 @@ Formato por entrada:
 
 ---
 
+## 2026-09-21 — Instalação global (`--global`) com duas versões e manifest
+
+**Contexto:** instalar o buildison projeto a projeto obriga a repetir o install em cada repo e a manter
+N cópias de `.claude/` em sincronia. O pedido foi deixar os agents, commands e skills disponíveis em
+qualquer projeto, numa versão com e noutra sem spec-workflow.
+
+**Decisão:** `--global` (`-Global` no PowerShell) instala em `~/.claude/{agents,commands,skills}` e, pro
+Codex, skills em `~/.agents/skills`. As duas versões reaproveitam os presets: `files` (sem
+spec-workflow, default) e `lite` (com — skill + MCP no escopo user do Claude e no `~/.codex/config.toml`).
+`full`, Serena e `settings.json` são recusados no global. Um manifest (`~/.buildison/global.manifest`)
+registra o que o global pôs no disco; a escolha fica em `~/.buildison/global.env` (incluindo os agentes,
+relidos mesmo quando se troca de `--preset`).
+
+**Motivo:** o `~/.claude` já tem coisas do usuário (skills próprias). Sem manifest, rodar de novo ou
+sobrescreveria skill dele com o mesmo nome, ou nunca saberia o que retirar ao trocar de versão. Com o
+manifest, item alheio é preservado com aviso e item nosso que saiu vai pra `~/.buildison/removidos-*`
+(não pro lixo — pode ter edição). O MCP do Claude é checado lendo o `~/.claude.json` direto, porque o
+`claude mcp get` também enxerga o `.mcp.json` da pasta atual. No Codex, a versão sem **não** remove o
+spec-workflow do `config.toml`: o arquivo é compartilhado com installs por projeto.
+
+**Impacto:** as funções do Codex (`codex_write_mcp` e cia.) subiram pra antes da primeira escrita no
+projeto, pro `--global` poder usá-las e sair antes do fluxo de projeto. Onze agents e a `qdrant-setup`
+deixaram de assumir `.claude/skills/` relativo ao projeto. OpenCode e Antigravity ficam fora do global
+por ora. No PowerShell, `-Infra`/`-Serena` não rodam junto com `-Global` (os blocos são inline no fim
+do script, depois do fluxo de projeto) — avisa e segue.
+
 ## 2026-09-19 — Qdrant sai do instalador e vira a skill `qdrant-setup`
 
 **Contexto:** o Qdrant era um MCP de primeira classe do instalador (`--memory local|vps`, `--qdrant-url`,

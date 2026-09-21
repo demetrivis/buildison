@@ -11,6 +11,7 @@
 #   ./install.sh --preset full            # + serena + .claude/settings.json (default)
 #   ./install.sh --list                   # presets, MCPs, agents, skills e commands disponíveis
 #   ./install.sh --update                 # ATUALIZA repo que já tem buildison (ver abaixo)
+#   ./install.sh --global                 # instala no GLOBAL (~/.claude, ~/.agents/skills) — ver abaixo
 #   curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files
 #
 # Sob medida (partem do preset e sobrescrevem só o que você passar):
@@ -28,10 +29,18 @@
 #           Faz .bak dos arquivos que mudarem e lista órfãos em .claude/.
 #           NÃO use --force pra atualizar: ele apaga context.md e decisions.md.
 #
-# Agentes suportados: claude, codex, opencode, antigravity
+# --global  instala agents, commands e skills pra TODOS os projetos da máquina, em vez de um:
+#             Claude Code → ~/.claude/{agents,commands,skills}   Codex → ~/.agents/skills
+#           Duas versões: --preset files (sem spec-workflow, default) ou --preset lite (com: skill
+#           + MCP spec-workflow no escopo user do Claude e no ~/.codex/config.toml).
+#           AGENTS.md, CLAUDE.md e docs/agent/ ficam de fora — descrevem UM projeto.
+#           Rodar de novo atualiza (relê ~/.buildison/global.env). Item que o buildison não pôs lá
+#           é seu e não é sobrescrito; item que ele pôs e saiu da seleção vai pra ~/.buildison/removidos-*.
+#
+# Agentes suportados: claude, codex, opencode, antigravity (no --global: claude e codex)
 # Flags: --dir <path> --agents <lista> --preset files|lite|full|custom --mcp --parts --skills
 #        --subagents --commands --list --infra/--no-infra --serena/--no-serena
-#        --yes --force --update
+#        --yes --force --update --global
 #
 # Memória vetorial (Qdrant) NÃO é mais instalada aqui: virou a skill 'qdrant-setup'
 # (+ command /qdrant). Peça ao agente "configura a memória" depois de instalar.
@@ -217,6 +226,7 @@ AGENTS_CSV=""
 ASSUME_YES=0
 FORCE=0
 UPDATE=0          # atualiza SÓ o boilerplate; preserva o que é do projeto
+GLOBAL=0          # instala em ~/.claude e ~/.agents/skills em vez de num projeto
 LIST=0
 SETUP_INFRA=""    # "" = perguntar; 1 = sim; 0 = não
 SETUP_SERENA=""   # idem
@@ -254,6 +264,7 @@ while [ $# -gt 0 ]; do
     --yes|-y)       ASSUME_YES=1; shift;;
     --force)        FORCE=1; shift;;
     --update)       UPDATE=1; shift;;
+    --global)       GLOBAL=1; shift;;
     -h|--help)      sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "Argumento desconhecido: $1 (use --help)";;
   esac
@@ -320,20 +331,30 @@ fi
 ok "Fonte: $SRC_DIR"
 
 # ---------- destino ----------
-if [ -z "$TARGET_DIR" ]; then
-  if [ "$ASSUME_YES" -eq 1 ]; then TARGET_DIR="$PWD"; else
-    ans=""; printf "Diretório do projeto [%s]: " "$PWD"; prompt_read ans
-    TARGET_DIR="${ans:-$PWD}"
+GLOBAL_DIR="$HOME/.buildison"
+GLOBAL_CFG="$GLOBAL_DIR/global.env"       # a escolha do --global (preset, filtros, agentes)
+GLOBAL_MAN="$GLOBAL_DIR/global.manifest"  # o que o --global pôs no disco — só isso ele mexe depois
+if [ "$GLOBAL" -eq 1 ]; then
+  [ -n "$TARGET_DIR" ] && die "--global não combina com --dir: ele instala em ~/.claude (e ~/.agents/skills no Codex)."
+  ok "Destino: global — ~/.claude (Claude Code) · ~/.agents/skills (Codex)"
+  CFG_FILE="$GLOBAL_CFG"
+else
+  if [ -z "$TARGET_DIR" ]; then
+    if [ "$ASSUME_YES" -eq 1 ]; then TARGET_DIR="$PWD"; else
+      ans=""; printf "Diretório do projeto [%s]: " "$PWD"; prompt_read ans
+      TARGET_DIR="${ans:-$PWD}"
+    fi
   fi
+  TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd || die "Diretório inválido: $TARGET_DIR")"
+  [ "$TARGET_DIR" = "$SRC_DIR" ] && die "O destino não pode ser o próprio repositório buildison. Use --dir."
+  ok "Destino: $TARGET_DIR"
+  PROJ_CFG="$TARGET_DIR/.buildison"
+  CFG_FILE="$PROJ_CFG"
 fi
-TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd || die "Diretório inválido: $TARGET_DIR")"
-[ "$TARGET_DIR" = "$SRC_DIR" ] && die "O destino não pode ser o próprio repositório buildison. Use --dir."
-ok "Destino: $TARGET_DIR"
 
-# ---------- o que já está instalado no projeto (.buildison) ----------
+# ---------- o que já está instalado (.buildison do projeto, ou ~/.buildison/global.env) ----------
 # Um --preset na linha de comando é uma escolha nova: aí o arquivo é ignorado.
-PROJ_CFG="$TARGET_DIR/.buildison"
-if [ -f "$PROJ_CFG" ] && [ "$PRESET_SET" -eq 0 ]; then
+if [ -f "$CFG_FILE" ] && [ "$PRESET_SET" -eq 0 ]; then
   while IFS='=' read -r k v || [ -n "$k" ]; do
     v="${v%$'\r'}"
     case "$k" in
@@ -344,8 +365,14 @@ if [ -f "$PROJ_CFG" ] && [ "$PRESET_SET" -eq 0 ]; then
       BUILDISON_SUBAGENTS) if [ "$SUBAGENTS_SET" -eq 0 ]; then SUBAGENTS_CSV="$v"; SUBAGENTS_SET=1; fi;;
       BUILDISON_COMMANDS)  if [ "$COMMANDS_SET" -eq 0 ];  then COMMANDS_CSV="$v";  COMMANDS_SET=1;  fi;;
     esac
-  done < "$PROJ_CFG"
-  info "Usando a escolha salva em .buildison (preset ${PRESET:-custom}) — passe --preset pra mudar"
+  done < "$CFG_FILE"
+  info "Usando a escolha salva em ${CFG_FILE/#$HOME/~} (preset ${PRESET:-custom}) — passe --preset pra mudar"
+fi
+# No global os agentes também ficam salvos, e valem mesmo quando você troca de --preset: sem isso,
+# "--global --preset lite --yes" depois de um install com codex cairia no default (só claude) e
+# tiraria as skills do Codex.
+if [ "$GLOBAL" -eq 1 ] && [ -z "$AGENTS_CSV" ] && [ -f "$GLOBAL_CFG" ]; then
+  AGENTS_CSV="$(sed -n 's/^BUILDISON_AGENTS=//p' "$GLOBAL_CFG" | tr -d '\r')"
 fi
 
 # ---------- seleção de agentes ----------
@@ -368,8 +395,35 @@ case ",$AGENTS_CSV," in *,claude,*|*claude*) SEL_CLAUDE=1;; esac
 case ",$AGENTS_CSV," in *codex*) SEL_CODEX=1;; esac
 case ",$AGENTS_CSV," in *opencode*) SEL_OPENCODE=1;; esac
 case ",$AGENTS_CSV," in *antigravity*) SEL_ANTIGRAVITY=1;; esac
+if [ "$GLOBAL" -eq 1 ]; then
+  [ "$SEL_OPENCODE" -eq 1 ]    && warn "--global: OpenCode ainda não tem instalação global — ignorado"
+  [ "$SEL_ANTIGRAVITY" -eq 1 ] && warn "--global: Antigravity ainda não tem instalação global — ignorado"
+  SEL_OPENCODE=0; SEL_ANTIGRAVITY=0
+  [ "$SEL_CLAUDE" -eq 0 ] && [ "$SEL_CODEX" -eq 0 ] && die "--global funciona com --agents claude e/ou codex."
+fi
 
 # ---------- preset: o que instalar ----------
+# No --global só existem duas versões: sem e com spec-workflow. Serena, settings.json, CLAUDE.md e
+# docs/agent/ são por projeto por natureza (o Serena precisa do --project; o settings.json daria
+# permissões amplas em todo projeto da máquina).
+if [ "$GLOBAL" -eq 1 ]; then
+  if [ "$PRESET_SET" -eq 0 ] && [ "$MCP_SET" -eq 0 ] && [ "$PARTS_SET" -eq 0 ]; then
+    if [ "$ASSUME_YES" -eq 1 ] || [ "$HAVE_TTY" -eq 0 ]; then PRESET="files"; else
+      echo ""
+      printf "${c_bold}Qual versão instalar no global?${c_reset}\n"
+      printf "  1) Sem spec-workflow — agents, commands e skills. Só arquivos.\n"
+      printf "  2) Com spec-workflow — o mesmo + skill e MCP spec-workflow, valendo em todo projeto.\n"
+      pr=""; printf "Escolha [1]: "; prompt_read pr
+      case "$pr" in 2) PRESET=lite;; *) PRESET=files;; esac
+    fi
+    PRESET_SET=1
+  fi
+  [ -z "$PRESET" ] && PRESET="files"
+  case "$PRESET" in
+    files|lite) ;;
+    *) die "--global tem duas versões: --preset files (sem spec-workflow) ou --preset lite (com). Serena e settings.json são por projeto.";;
+  esac
+fi
 if [ "$PRESET_SET" -eq 0 ] && [ "$MCP_SET" -eq 0 ] && [ "$PARTS_SET" -eq 0 ]; then
   if [ "$ASSUME_YES" -eq 1 ] || [ "$HAVE_TTY" -eq 0 ]; then PRESET="full"; else
     echo ""
@@ -472,6 +526,13 @@ check_names() { # part csv
   done
   return 0
 }
+if [ "$GLOBAL" -eq 1 ]; then
+  csv_has "$MCP_CSV" serena && die "--global: o Serena é por projeto (precisa do --project). Instale-o no projeto."
+  if csv_has "$PARTS_CSV" settings; then
+    warn "--global: settings.json fica de fora (daria permissões amplas em todo projeto da máquina)"
+    PARTS_CSV="$(printf ',%s,' "$PARTS_CSV" | sed 's/,settings,/,/; s/^,//; s/,$//')"
+  fi
+fi
 check_names skills   "$SKILLS_CSV"
 check_names agents   "$SUBAGENTS_CSV"
 check_names commands "$COMMANDS_CSV"
@@ -500,7 +561,7 @@ TAGS=""
 if [ "$HAS_SPEC" -eq 1 ];   then TAGS="$TAGS spec"; fi
 if [ "$HAS_SERENA" -eq 1 ]; then TAGS="$TAGS serena"; fi
 if [ -n "$MCP_CSV" ];       then TAGS="$TAGS mcp"; fi
-if [ "$PRESET" = "full" ] || [ "$SETUP_INFRA" = "1" ]; then
+if [ "$PRESET" = "full" ] || [ "$SETUP_INFRA" = "1" ] || [ "$GLOBAL" -eq 1 ]; then
   TAGS="$TAGS infra"
 fi
 has_tag() { case " $TAGS " in *" $1 "*) return 0;; esac; return 1; }
@@ -539,157 +600,7 @@ render_tagged() { # src dst
 
 info "Instalando: preset $PRESET · MCP: ${MCP_CSV:-nenhum} · partes: $PARTS_CSV"
 
-# ---------- copiar core compartilhado ----------
-# Duas naturezas de arquivo, e elas se comportam DIFERENTE num update:
-#
-#   boilerplate  (AGENTS.md)  — permanente, vem do buildison, não muda por projeto.
-#                               Num --update TEM que ser atualizado, senão o repo antigo
-#                               nunca recebe regra nova (era o bug: copy_keep o congelava).
-#   do projeto   (context.md, decisions.md) — conhecimento que o agente acumulou.
-#                               NUNCA sobrescrever num --update; só --force faz isso.
-copy_keep() { # src dst  (não sobrescreve se já existe, salvo --force)
-  local s="$1" d="$2"
-  mkdir -p "$(dirname "$d")"
-  if [ -e "$d" ] && [ "$FORCE" -eq 0 ]; then warn "mantido (já existe): ${d#$TARGET_DIR/}"; else cp -f "$s" "$d"; ok "${d#$TARGET_DIR/}"; fi
-}
-copy_boiler() { # src dst  (boilerplate: atualiza no --update e no --force; faz .bak)
-  local s="$1" d="$2"
-  mkdir -p "$(dirname "$d")"
-  if [ -e "$d" ] && [ "$UPDATE" -eq 0 ] && [ "$FORCE" -eq 0 ]; then
-    warn "mantido (já existe): ${d#$TARGET_DIR/}"
-  else
-    [ -e "$d" ] && ! cmp -s "$s" "$d" && cp "$d" "$d.bak" 2>/dev/null || true
-    cp -f "$s" "$d"; ok "${d#$TARGET_DIR/}"
-  fi
-}
-info "Instalando core compartilhado..."
-render_tagged "$SRC_DIR/AGENTS.md" "$WORK/AGENTS.md"
-copy_boiler "$WORK/AGENTS.md" "$TARGET_DIR/AGENTS.md"
-# Copia dos TEMPLATES, não do context.md/decisions.md do próprio buildison — aqueles
-# descrevem o buildison e vazariam pra todo projeto herdado. (Fallback pros arquivos
-# antigos mantém compatibilidade com clones anteriores à separação.)
-CTX_SRC="$SRC_DIR/docs/agent/templates/context.md";   [ -f "$CTX_SRC" ] || CTX_SRC="$SRC_DIR/docs/agent/context.md"
-DEC_SRC="$SRC_DIR/docs/agent/templates/decisions.md"; [ -f "$DEC_SRC" ] || DEC_SRC="$SRC_DIR/docs/agent/decisions.md"
-render_tagged "$CTX_SRC" "$WORK/context.md"
-render_tagged "$DEC_SRC" "$WORK/decisions.md"
-copy_keep "$WORK/context.md"   "$TARGET_DIR/docs/agent/context.md"
-copy_keep "$WORK/decisions.md" "$TARGET_DIR/docs/agent/decisions.md"
-if [ "$HAS_SPEC" -eq 1 ] && [ -d "$SRC_DIR/.spec-workflow/templates" ]; then
-  mkdir -p "$TARGET_DIR/.spec-workflow"
-  cp -Rf "$SRC_DIR/.spec-workflow/templates" "$TARGET_DIR/.spec-workflow/"
-  ok ".spec-workflow/templates/"
-fi
-
-# Regrava um JSON de MCP preservando servidores que o instalador NÃO gerencia.
-# O arquivo é reescrito do zero a cada run; sem isso, um MCP que você (ou a skill
-# qdrant-setup) adicionou sumia em silêncio no próximo --update — o mesmo modo de falha
-# que o bloco do Codex já tinha com tabelas desconhecidas.
-merge_mcp_json() { # arquivo  chave-raiz  json-novo  managed-csv
-  local f="$1" root="$2" fresh="$3" managed="$4" py
-  py="$(find_python || true)"
-  if [ -z "$py" ] || [ ! -f "$f" ]; then
-    printf '%s\n' "$fresh" > "$f"; return 0
-  fi
-  printf '%s' "$fresh" > "$WORK/mcp-fresh.json"
-  "$py" - "$f" "$root" "$WORK/mcp-fresh.json" "$managed" <<'PYMERGE' || printf '%s\n' "$fresh" > "$f"
-import json, sys
-path, root, freshpath, managed = sys.argv[1:5]
-managed = {m for m in managed.split(",") if m}
-fresh = json.load(open(freshpath))
-try:
-    old = json.load(open(path))
-    if not isinstance(old, dict): old = {}
-except Exception:
-    old = {}
-out = dict(old)
-out.update({k: v for k, v in fresh.items() if k != root})
-servers = dict(old.get(root) or {})
-# tira só o que ESTE instalador gerencia e não foi pedido agora; o resto fica
-for k in list(servers):
-    if k in managed and k not in (fresh.get(root) or {}):
-        del servers[k]
-servers.update(fresh.get(root) or {})
-out[root] = servers
-with open(path, "w") as f:
-    json.dump(out, f, indent=2); f.write("\n")
-PYMERGE
-  return 0
-}
-
-# entradas de JSON separadas por vírgula (.mcp.json / opencode.json)
-ENTRIES=""
-add_entry() { if [ -n "$ENTRIES" ]; then ENTRIES="$ENTRIES,"$'\n'; fi; ENTRIES="$ENTRIES$1"; }
-
-# ---------- Claude Code ----------
-if [ "$SEL_CLAUDE" -eq 1 ]; then
-  info "Configurando Claude Code..."
-  # Item a item (não a pasta inteira) pra respeitar preset/filtros. O destino de cada cp é
-  # a pasta PAI (.claude/skills/), então skill que já existe é mesclada, não aninhada.
-  for part in agents commands skills; do
-    [ -d "$SRC_DIR/.claude/$part" ] || continue
-    n=0
-    for item in "$SRC_DIR/.claude/$part"/*; do
-      [ -e "$item" ] || continue
-      name="$(basename "$item")"; name="${name%.md}"
-      if item_selected "$part" "$name"; then
-        mkdir -p "$TARGET_DIR/.claude/$part"
-        cp -Rf "$item" "$TARGET_DIR/.claude/$part/"
-        n=$((n+1))
-      fi
-    done
-    if [ "$n" -gt 0 ]; then ok ".claude/$part/ ($n)"; fi
-  done
-  if csv_has "$PARTS_CSV" settings && [ -f "$SRC_DIR/.claude/settings.json" ]; then
-    copy_boiler "$SRC_DIR/.claude/settings.json" "$TARGET_DIR/.claude/settings.json"
-  fi
-  # cp -Rf MESCLA (não sincroniza): agent/skill renomeado ou removido do buildison fica
-  # órfão aqui pra sempre, e o Claude Code carrega os dois. Não deletamos — o .claude/ do
-  # projeto pode ter customização sua (settings.local.json, agents próprios, worktrees) —
-  # mas listamos pra você decidir.
-  if [ "$UPDATE" -eq 1 ]; then
-    ORPHANS=""
-    for sub in agents commands skills; do
-      [ -d "$TARGET_DIR/.claude/$sub" ] || continue
-      for f in "$TARGET_DIR/.claude/$sub"/*; do
-        [ -e "$f" ] || continue
-        case "$f" in *.bak) continue;; esac
-        [ -e "$SRC_DIR/.claude/$sub/$(basename "$f")" ] || ORPHANS="$ORPHANS  .claude/$sub/$(basename "$f")\n"
-      done
-    done
-    if [ -n "$ORPHANS" ]; then
-      warn "Arquivos em .claude/ que não existem mais no buildison (seus, ou resquício de versão antiga):"
-      printf "$ORPHANS"
-      warn "Revise e remova os que forem resquício."
-    fi
-  fi
-  # ⚠️ O CLAUDE.md tem natureza DUPLA: os @imports são boilerplate, mas o resto é
-  # documentação do projeto que o time escreveu. Regravar cego destrói isso — já
-  # aconteceu: dois repos perderam 485 e 325 linhas de doc (acesso a VPS, banco,
-  # arquitetura) numa execução do installer. Se já existe, NÃO tocamos.
-  if [ -e "$TARGET_DIR/CLAUDE.md" ] && [ "$FORCE" -eq 0 ]; then
-    warn "mantido (já existe): CLAUDE.md — confira se tem os @imports de AGENTS.md e docs/agent/context.md"
-  else
-    # template único (bash e PowerShell): as seções de Serena/memória saem pelas tags
-    render_tagged "$SRC_DIR/docs/agent/templates/claude-md.md" "$TARGET_DIR/CLAUDE.md"
-    ok "CLAUDE.md"
-  fi
-  if [ -n "$MCP_CSV" ]; then
-    ENTRIES=""
-    if [ "$HAS_SPEC" -eq 1 ]; then
-      add_entry '    "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] }'
-    fi
-    if [ "$HAS_SERENA" -eq 1 ]; then
-      add_entry '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }'
-    fi
-    merge_mcp_json "$TARGET_DIR/.mcp.json" mcpServers \
-      "$(printf '{\n  "mcpServers": {\n%s\n  }\n}\n' "$ENTRIES")" "spec-workflow,serena"
-    ok ".mcp.json (${MCP_CSV})"
-  else
-    ok "Claude: sem MCP neste preset — .mcp.json não gerado"
-  fi
-fi
-
-# ---------- Codex (AGENTS.md já copiado; MCP no ~/.codex/config.toml) ----------
+# ---------- Codex: helpers do ~/.codex/config.toml (usados no install por projeto e no --global) ----------
 # O config.toml é GLOBAL e os nomes de tabela ([mcp_servers.serena] etc) são fixos. Em TOML
 # uma tabela declarada duas vezes invalida o arquivo INTEIRO, e aí o Codex descarta a config
 # toda (inclusive [windows] — o ChatGPT/Codex Desktop entra em loop ou abre várias instâncias).
@@ -811,6 +722,302 @@ codex_write_mcp() {
   cp -f "$tmp" "$cfg"
   ok "Codex: MCP em ~/.codex/config.toml (bloco único, validado)${bak:+ · backup ${bak##*/}}"
 }
+
+# ---------- --global: instala pra todos os projetos da máquina ----------
+# O manifest (~/.buildison/global.manifest) lista o que ESTE modo pôs no disco. É o que separa
+# item do buildison de item seu: só o que está nele é sobrescrito ou retirado. Sem isso, rodar
+# de novo apagaria skills suas com o mesmo nome, ou deixaria órfã pra sempre uma skill que saiu.
+claude_user_mcp_has() { # nome → o MCP existe no escopo USER do Claude Code?
+  # Lê o ~/.claude.json direto: o `claude mcp get` também enxerga o .mcp.json da pasta atual,
+  # e aí um servidor de projeto passaria por global.
+  local py; py="$(find_python || true)"
+  [ -n "$py" ] && [ -f "$HOME/.claude.json" ] || return 1
+  "$py" - "$HOME/.claude.json" "$1" <<'PYHAS'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+sys.exit(0 if sys.argv[2] in (d.get("mcpServers") or {}) else 1)
+PYHAS
+}
+install_global() {
+  local old="$WORK/global.old" new="$WORK/global.new" root part item name dst base n moved=0 bak="" agents=""
+  local spec_cmd="npx -y @pimzino/spec-workflow-mcp@latest ."
+  mkdir -p "$GLOBAL_DIR"
+  : > "$new"
+  if [ -f "$GLOBAL_MAN" ]; then cp "$GLOBAL_MAN" "$old"; else : > "$old"; fi
+
+  if [ "$SEL_CLAUDE" -eq 1 ]; then agents="claude"; fi
+  if [ "$SEL_CODEX" -eq 1 ];  then agents="${agents:+$agents,}codex"; fi
+  if [ "$HAS_SPEC" -eq 1 ]; then info "Instalando no global — versão COM spec-workflow"
+  else info "Instalando no global — versão SEM spec-workflow"; fi
+
+  # Claude Code lê agents/commands/skills de ~/.claude; o Codex só tem skills, em ~/.agents/skills
+  for root in $(printf '%s' "$agents" | tr ',' ' '); do
+    for part in agents commands skills; do
+      case "$root" in
+        claude) base="$HOME/.claude/$part";;
+        codex)  [ "$part" = skills ] || continue; base="$HOME/.agents/skills";;
+      esac
+      n=0
+      for item in "$SRC_DIR/.claude/$part"/*; do
+        [ -e "$item" ] || continue
+        name="$(basename "$item")"
+        item_selected "$part" "${name%.md}" || continue
+        dst="$base/$name"
+        if [ -e "$dst" ] && ! grep -qxF "$dst" "$old"; then
+          if [ "$FORCE" -eq 0 ]; then
+            warn "${dst/#$HOME/~} já existe e não foi o buildison que pôs lá — mantido (--force sobrescreve)"
+            continue
+          fi
+          [ -z "$bak" ] && { bak="$GLOBAL_DIR/removidos-$(date +%s)"; mkdir -p "$bak"; }
+          mkdir -p "$bak/$(dirname "${dst#$HOME/}")"; mv "$dst" "$bak/${dst#$HOME/}"
+        fi
+        mkdir -p "$base"
+        # rm antes do cp: cp -R mescla, e arquivo removido de dentro de uma skill ficaria órfão
+        rm -rf "$dst"
+        cp -R "$item" "$base/"
+        echo "$dst" >> "$new"
+        n=$((n+1))
+      done
+      if [ "$n" -gt 0 ]; then ok "${base/#$HOME/~}/ ($n)"; fi
+    done
+  done
+
+  # o que o buildison pôs antes e não entra mais (trocou de versão, filtrou, tirou um agente):
+  # vai pra ~/.buildison/removidos-*, não pro lixo — pode ter edição sua dentro
+  while IFS= read -r dst; do
+    case "$dst" in ""|mcp:*) continue;; esac
+    grep -qxF "$dst" "$new" && continue
+    [ -e "$dst" ] || continue
+    [ -z "$bak" ] && { bak="$GLOBAL_DIR/removidos-$(date +%s)"; mkdir -p "$bak"; }
+    mkdir -p "$bak/$(dirname "${dst#$HOME/}")"
+    mv "$dst" "$bak/${dst#$HOME/}"
+    moved=$((moved+1))
+  done < "$old"
+  if [ "$moved" -gt 0 ]; then warn "$moved item(ns) que o buildison tinha posto no global saíram da seleção — movidos pra ${bak/#$HOME/~}"; fi
+
+  # ---- MCP spec-workflow: só na versão "com" ----
+  if [ "$SEL_CLAUDE" -eq 1 ]; then
+    if [ "$HAS_SPEC" -eq 1 ]; then
+      if claude_user_mcp_has spec-workflow; then
+        ok "Claude: MCP spec-workflow já está no escopo user — mantido"
+        if grep -qxF "mcp:claude:spec-workflow" "$old"; then echo "mcp:claude:spec-workflow" >> "$new"; fi
+      elif ! command -v claude >/dev/null 2>&1; then
+        warn "Claude: CLI 'claude' não está no PATH — MCP não registrado. Rode: claude mcp add -s user spec-workflow -- $spec_cmd"
+      elif (cd "$HOME" && claude mcp add -s user spec-workflow -- $spec_cmd) >/dev/null 2>&1; then
+        ok "Claude: MCP spec-workflow no escopo user (vale em todo projeto)"
+        echo "mcp:claude:spec-workflow" >> "$new"
+      else
+        warn "Claude: falhou registrar o MCP. Rode: claude mcp add -s user spec-workflow -- $spec_cmd"
+      fi
+    elif grep -qxF "mcp:claude:spec-workflow" "$old"; then
+      # só tira se foi o --global que pôs: um spec-workflow que você registrou à mão fica
+      if command -v claude >/dev/null 2>&1 && (cd "$HOME" && claude mcp remove -s user spec-workflow) >/dev/null 2>&1; then
+        ok "Claude: MCP spec-workflow removido do escopo user (versão sem spec-workflow)"
+      else
+        warn "Claude: não consegui remover o MCP. Rode: claude mcp remove -s user spec-workflow"
+        echo "mcp:claude:spec-workflow" >> "$new"
+      fi
+    fi
+  fi
+  if [ "$SEL_CODEX" -eq 1 ]; then
+    if [ "$HAS_SPEC" -eq 1 ]; then
+      codex_write_mcp
+      echo "mcp:codex:spec-workflow" >> "$new"
+    elif grep -qxF "mcp:codex:spec-workflow" "$old"; then
+      # o ~/.codex/config.toml é o mesmo que os installs por projeto usam: tirar daqui quebraria
+      # projeto que conta com ele. Fica, e você decide.
+      info "Codex: o spec-workflow continua no ~/.codex/config.toml (config compartilhada com projetos) — tire à mão se quiser"
+    fi
+  fi
+
+  cp "$new" "$GLOBAL_MAN"
+  cat > "$GLOBAL_CFG" <<EOFCFG
+# buildison — o que está instalado no GLOBAL (~/.claude e ~/.agents/skills). Rodar
+# "install.sh --global" de novo relê este arquivo; passe --preset files|lite pra trocar de versão.
+BUILDISON_PRESET=$PRESET
+BUILDISON_MCP=$MCP_CSV
+BUILDISON_PARTS=$PARTS_CSV
+BUILDISON_SKILLS=$SKILLS_CSV
+BUILDISON_SUBAGENTS=$SUBAGENTS_CSV
+BUILDISON_COMMANDS=$COMMANDS_CSV
+BUILDISON_AGENTS=$agents
+EOFCFG
+
+  [ "$SETUP_INFRA" = "1" ]  && { echo ""; info "Montando local-infra..."; setup_local_infra; }
+  [ "$SETUP_SERENA" = "1" ] && { echo ""; info "Configurando Serena..."; setup_serena; }
+
+  echo ""
+  if [ "$CODEX_FAILED" -eq 1 ]; then warn "Codex NÃO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo."; fi
+  ok "Global instalado (${agents}) — versão $( [ "$HAS_SPEC" -eq 1 ] && echo com || echo sem ) spec-workflow"
+  echo ""
+  printf "${c_bold}Próximos passos:${c_reset}\n"
+  echo "  1. Abra qualquer projeto: agents, commands e skills já aparecem (reinicie o agente se estiver aberto)."
+  if [ "$HAS_SPEC" -eq 1 ] && [ "$SEL_CLAUDE" -eq 1 ]; then
+    echo "  2. Os templates próprios do buildison (.spec-workflow/templates/) só vêm no install por projeto;"
+    echo "     no global o spec-workflow usa os templates padrão dele."
+  fi
+  echo "  · Atualizar: rode o mesmo comando de novo. Trocar de versão: --global --preset files|lite."
+  echo "  · Não instale o buildison também por projeto: os itens aparecem duplicados."
+}
+if [ "$GLOBAL" -eq 1 ]; then install_global; exit 0; fi
+
+# ---------- copiar core compartilhado ----------
+# Duas naturezas de arquivo, e elas se comportam DIFERENTE num update:
+#
+#   boilerplate  (AGENTS.md)  — permanente, vem do buildison, não muda por projeto.
+#                               Num --update TEM que ser atualizado, senão o repo antigo
+#                               nunca recebe regra nova (era o bug: copy_keep o congelava).
+#   do projeto   (context.md, decisions.md) — conhecimento que o agente acumulou.
+#                               NUNCA sobrescrever num --update; só --force faz isso.
+copy_keep() { # src dst  (não sobrescreve se já existe, salvo --force)
+  local s="$1" d="$2"
+  mkdir -p "$(dirname "$d")"
+  if [ -e "$d" ] && [ "$FORCE" -eq 0 ]; then warn "mantido (já existe): ${d#$TARGET_DIR/}"; else cp -f "$s" "$d"; ok "${d#$TARGET_DIR/}"; fi
+}
+copy_boiler() { # src dst  (boilerplate: atualiza no --update e no --force; faz .bak)
+  local s="$1" d="$2"
+  mkdir -p "$(dirname "$d")"
+  if [ -e "$d" ] && [ "$UPDATE" -eq 0 ] && [ "$FORCE" -eq 0 ]; then
+    warn "mantido (já existe): ${d#$TARGET_DIR/}"
+  else
+    [ -e "$d" ] && ! cmp -s "$s" "$d" && cp "$d" "$d.bak" 2>/dev/null || true
+    cp -f "$s" "$d"; ok "${d#$TARGET_DIR/}"
+  fi
+}
+info "Instalando core compartilhado..."
+render_tagged "$SRC_DIR/AGENTS.md" "$WORK/AGENTS.md"
+copy_boiler "$WORK/AGENTS.md" "$TARGET_DIR/AGENTS.md"
+# Copia dos TEMPLATES, não do context.md/decisions.md do próprio buildison — aqueles
+# descrevem o buildison e vazariam pra todo projeto herdado. (Fallback pros arquivos
+# antigos mantém compatibilidade com clones anteriores à separação.)
+CTX_SRC="$SRC_DIR/docs/agent/templates/context.md";   [ -f "$CTX_SRC" ] || CTX_SRC="$SRC_DIR/docs/agent/context.md"
+DEC_SRC="$SRC_DIR/docs/agent/templates/decisions.md"; [ -f "$DEC_SRC" ] || DEC_SRC="$SRC_DIR/docs/agent/decisions.md"
+render_tagged "$CTX_SRC" "$WORK/context.md"
+render_tagged "$DEC_SRC" "$WORK/decisions.md"
+copy_keep "$WORK/context.md"   "$TARGET_DIR/docs/agent/context.md"
+copy_keep "$WORK/decisions.md" "$TARGET_DIR/docs/agent/decisions.md"
+if [ "$HAS_SPEC" -eq 1 ] && [ -d "$SRC_DIR/.spec-workflow/templates" ]; then
+  mkdir -p "$TARGET_DIR/.spec-workflow"
+  cp -Rf "$SRC_DIR/.spec-workflow/templates" "$TARGET_DIR/.spec-workflow/"
+  ok ".spec-workflow/templates/"
+fi
+
+# Regrava um JSON de MCP preservando servidores que o instalador NÃO gerencia.
+# O arquivo é reescrito do zero a cada run; sem isso, um MCP que você (ou a skill
+# qdrant-setup) adicionou sumia em silêncio no próximo --update — o mesmo modo de falha
+# que o bloco do Codex já tinha com tabelas desconhecidas.
+merge_mcp_json() { # arquivo  chave-raiz  json-novo  managed-csv
+  local f="$1" root="$2" fresh="$3" managed="$4" py
+  py="$(find_python || true)"
+  if [ -z "$py" ] || [ ! -f "$f" ]; then
+    printf '%s\n' "$fresh" > "$f"; return 0
+  fi
+  printf '%s' "$fresh" > "$WORK/mcp-fresh.json"
+  "$py" - "$f" "$root" "$WORK/mcp-fresh.json" "$managed" <<'PYMERGE' || printf '%s\n' "$fresh" > "$f"
+import json, sys
+path, root, freshpath, managed = sys.argv[1:5]
+managed = {m for m in managed.split(",") if m}
+fresh = json.load(open(freshpath))
+try:
+    old = json.load(open(path))
+    if not isinstance(old, dict): old = {}
+except Exception:
+    old = {}
+out = dict(old)
+out.update({k: v for k, v in fresh.items() if k != root})
+servers = dict(old.get(root) or {})
+# tira só o que ESTE instalador gerencia e não foi pedido agora; o resto fica
+for k in list(servers):
+    if k in managed and k not in (fresh.get(root) or {}):
+        del servers[k]
+servers.update(fresh.get(root) or {})
+out[root] = servers
+with open(path, "w") as f:
+    json.dump(out, f, indent=2); f.write("\n")
+PYMERGE
+  return 0
+}
+
+# entradas de JSON separadas por vírgula (.mcp.json / opencode.json)
+ENTRIES=""
+add_entry() { if [ -n "$ENTRIES" ]; then ENTRIES="$ENTRIES,"$'\n'; fi; ENTRIES="$ENTRIES$1"; }
+
+# ---------- Claude Code ----------
+if [ "$SEL_CLAUDE" -eq 1 ]; then
+  info "Configurando Claude Code..."
+  if [ -s "$GLOBAL_MAN" ]; then
+    warn "o buildison também está no global (~/.claude): neste projeto os agents, commands e skills vão aparecer duplicados"
+  fi
+  # Item a item (não a pasta inteira) pra respeitar preset/filtros. O destino de cada cp é
+  # a pasta PAI (.claude/skills/), então skill que já existe é mesclada, não aninhada.
+  for part in agents commands skills; do
+    [ -d "$SRC_DIR/.claude/$part" ] || continue
+    n=0
+    for item in "$SRC_DIR/.claude/$part"/*; do
+      [ -e "$item" ] || continue
+      name="$(basename "$item")"; name="${name%.md}"
+      if item_selected "$part" "$name"; then
+        mkdir -p "$TARGET_DIR/.claude/$part"
+        cp -Rf "$item" "$TARGET_DIR/.claude/$part/"
+        n=$((n+1))
+      fi
+    done
+    if [ "$n" -gt 0 ]; then ok ".claude/$part/ ($n)"; fi
+  done
+  if csv_has "$PARTS_CSV" settings && [ -f "$SRC_DIR/.claude/settings.json" ]; then
+    copy_boiler "$SRC_DIR/.claude/settings.json" "$TARGET_DIR/.claude/settings.json"
+  fi
+  # cp -Rf MESCLA (não sincroniza): agent/skill renomeado ou removido do buildison fica
+  # órfão aqui pra sempre, e o Claude Code carrega os dois. Não deletamos — o .claude/ do
+  # projeto pode ter customização sua (settings.local.json, agents próprios, worktrees) —
+  # mas listamos pra você decidir.
+  if [ "$UPDATE" -eq 1 ]; then
+    ORPHANS=""
+    for sub in agents commands skills; do
+      [ -d "$TARGET_DIR/.claude/$sub" ] || continue
+      for f in "$TARGET_DIR/.claude/$sub"/*; do
+        [ -e "$f" ] || continue
+        case "$f" in *.bak) continue;; esac
+        [ -e "$SRC_DIR/.claude/$sub/$(basename "$f")" ] || ORPHANS="$ORPHANS  .claude/$sub/$(basename "$f")\n"
+      done
+    done
+    if [ -n "$ORPHANS" ]; then
+      warn "Arquivos em .claude/ que não existem mais no buildison (seus, ou resquício de versão antiga):"
+      printf "$ORPHANS"
+      warn "Revise e remova os que forem resquício."
+    fi
+  fi
+  # ⚠️ O CLAUDE.md tem natureza DUPLA: os @imports são boilerplate, mas o resto é
+  # documentação do projeto que o time escreveu. Regravar cego destrói isso — já
+  # aconteceu: dois repos perderam 485 e 325 linhas de doc (acesso a VPS, banco,
+  # arquitetura) numa execução do installer. Se já existe, NÃO tocamos.
+  if [ -e "$TARGET_DIR/CLAUDE.md" ] && [ "$FORCE" -eq 0 ]; then
+    warn "mantido (já existe): CLAUDE.md — confira se tem os @imports de AGENTS.md e docs/agent/context.md"
+  else
+    # template único (bash e PowerShell): as seções de Serena/memória saem pelas tags
+    render_tagged "$SRC_DIR/docs/agent/templates/claude-md.md" "$TARGET_DIR/CLAUDE.md"
+    ok "CLAUDE.md"
+  fi
+  if [ -n "$MCP_CSV" ]; then
+    ENTRIES=""
+    if [ "$HAS_SPEC" -eq 1 ]; then
+      add_entry '    "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] }'
+    fi
+    if [ "$HAS_SERENA" -eq 1 ]; then
+      add_entry '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }'
+    fi
+    merge_mcp_json "$TARGET_DIR/.mcp.json" mcpServers \
+      "$(printf '{\n  "mcpServers": {\n%s\n  }\n}\n' "$ENTRIES")" "spec-workflow,serena"
+    ok ".mcp.json (${MCP_CSV})"
+  else
+    ok "Claude: sem MCP neste preset — .mcp.json não gerado"
+  fi
+fi
+
+# ---------- Codex (AGENTS.md já copiado; MCP no ~/.codex/config.toml) ----------
 if [ "$SEL_CODEX" -eq 1 ]; then
   info "Configurando Codex..."
   if [ -n "$MCP_CSV" ]; then

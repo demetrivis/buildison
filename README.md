@@ -11,6 +11,7 @@ Sem duplicar conteúdo: `AGENTS.md` + `.claude/` + `docs/agent/` são a fonte; c
 
 - [Instalar do zero](#instalar-do-zero)
 - [Instalar leve ou sob medida](#instalar-leve-ou-sob-medida) — só os arquivos, sem MCP e sem infra
+- [Instalar no global](#instalar-no-global) — pra todos os projetos da máquina, com ou sem spec-workflow
 - [Atualizar um projeto que já tem buildison](#atualizar-um-projeto-que-já-tem-buildison)
 - [A infra](#a-infra) — local-infra; memória vetorial via `/qdrant`
 - [O que cada agente recebe](#o-que-cada-agente-recebe)
@@ -132,6 +133,51 @@ A escolha fica salva em `.buildison`, na raiz do projeto. As próximas execuçõ
 arquivo — passe outro `--preset` para mudar.
 
 ---
+
+## Instalar no global
+
+Em vez de instalar projeto a projeto, `--global` põe agents, commands e skills **na máquina** — valem em
+todo projeto que você abrir, sem nada dentro dele:
+
+| Agente | Onde vai |
+| :-- | :-- |
+| Claude Code | `~/.claude/agents`, `~/.claude/commands`, `~/.claude/skills` |
+| Codex | `~/.agents/skills` (o Codex não tem agents nem commands em arquivo) |
+
+Duas versões:
+
+```bash
+# SEM spec-workflow (default) — só arquivos
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \
+  | bash -s -- --global --agents claude,codex --yes
+
+# COM spec-workflow — + skill spec-workflow + MCP spec-workflow valendo em todo projeto
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \
+  | bash -s -- --global --preset lite --agents claude,codex --yes
+```
+
+No PowerShell: `.\install.ps1 -Global -Agents claude,codex -Yes` (e `-Preset lite` pra versão com).
+
+Na versão **com**, o MCP entra no **escopo user** do Claude Code (`claude mcp add -s user`) e no
+`~/.codex/config.toml`. Os templates próprios do buildison em `.spec-workflow/templates/` só vêm no
+install por projeto — no global o spec-workflow usa os templates padrão dele.
+
+**O que fica de fora**, por ser de um projeto só: `AGENTS.md`, `CLAUDE.md`, `docs/agent/`, o
+`settings.json` (permissões amplas em todo projeto seria demais) e o Serena (precisa do `--project`).
+OpenCode e Antigravity ainda não têm instalação global.
+
+**Atualizar** é rodar o mesmo comando de novo: a escolha fica em `~/.buildison/global.env` e é relida.
+**Trocar de versão** é passar o outro `--preset` — da com pra sem, a skill e o MCP do spec-workflow saem.
+
+O instalador só mexe no que **ele mesmo** pôs lá (`~/.buildison/global.manifest`):
+
+- skill ou agent **seu** com o mesmo nome de um do buildison é mantido, com aviso (`--force` sobrescreve);
+- item do buildison que saiu da seleção vai pra `~/.buildison/removidos-<data>/`, não pro lixo;
+- no Codex, trocar pra versão sem **não** tira o spec-workflow do `~/.codex/config.toml` — esse arquivo é
+  compartilhado com os installs por projeto, e tirar dali quebraria quem conta com ele.
+
+> **Global ou por projeto, não os dois.** Com os dois, os mesmos agents e skills aparecem duplicados — o
+> install por projeto avisa quando detecta o global.
 
 ## Atualizar um projeto que já tem buildison
 

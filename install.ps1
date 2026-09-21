@@ -27,9 +27,15 @@ A escolha fica em .buildison na raiz do projeto e e reaproveitada nas proximas e
 -Update atualiza so o boilerplate (AGENTS.md, .claude\, .agents\, .spec-workflow\templates\, .mcp.json)
 e preserva CLAUDE.md, docs\agent\context.md e docs\agent\decisions.md. Nao use -Force pra atualizar.
 
-Agentes: claude, codex, opencode, antigravity
+Agentes: claude, codex, opencode, antigravity (no -Global: claude e codex)
 Flags: -Dir -Agents -Preset -Mcp -Parts -Skills -Subagents -Commands -List -Infra/-NoInfra
-       -Serena/-NoSerena -Yes -Force -Update
+       -Serena/-NoSerena -Yes -Force -Update -Global
+
+  -Global instala agents, commands e skills pra TODOS os projetos da maquina:
+    Claude Code -> ~\.claude\{agents,commands,skills}   Codex -> ~\.agents\skills
+  Duas versoes: -Preset files (sem spec-workflow, default) ou -Preset lite (com: skill + MCP
+  spec-workflow no escopo user do Claude e no ~/.codex/config.toml). Rodar de novo atualiza
+  (rele ~\.buildison\global.env). Item que o buildison nao pos la e seu e nao e sobrescrito.
 
   Memoria vetorial (Qdrant) NAO e mais instalada aqui: virou a skill 'qdrant-setup'
   (+ command /qdrant). Peca ao agente "configura a memoria" depois de instalar.
@@ -52,6 +58,7 @@ param(
   [switch]$Yes,
   [switch]$Force,
   [switch]$Update,
+  [switch]$Global,
   [switch]$Help
 )
 
@@ -358,14 +365,25 @@ if ($List) {
 Ok "Fonte: $src"
 
 # ---------- destino ----------
-if (-not $Dir) {
-  if ($Yes) { $Dir = (Get-Location).Path }
-  else { $ans = Read-Host "Diretorio do projeto [$((Get-Location).Path)]"; $Dir = if ($ans) { $ans } else { (Get-Location).Path } }
+$globalDir = Join-Path $env:USERPROFILE '.buildison'
+$globalCfg = Join-Path $globalDir 'global.env'       # a escolha do -Global (preset, filtros, agentes)
+$globalMan = Join-Path $globalDir 'global.manifest'  # o que o -Global pos no disco - so isso ele mexe depois
+if ($Global) {
+  if ($Dir) { Die '-Global nao combina com -Dir: ele instala em ~\.claude (e ~\.agents\skills no Codex).' }
+  Ok 'Destino: global - ~\.claude (Claude Code) | ~\.agents\skills (Codex)'
+  $Target = $env:USERPROFILE
+  $cfgFile = $globalCfg
+} else {
+  if (-not $Dir) {
+    if ($Yes) { $Dir = (Get-Location).Path }
+    else { $ans = Read-Host "Diretorio do projeto [$((Get-Location).Path)]"; $Dir = if ($ans) { $ans } else { (Get-Location).Path } }
+  }
+  if (-not (Test-Path $Dir)) { Die "Diretorio invalido: $Dir" }
+  $Target = (Resolve-Path $Dir).Path
+  if ($Target -eq (Resolve-Path $src).Path) { Die 'O destino nao pode ser o proprio repositorio buildison. Use -Dir.' }
+  Ok "Destino: $Target"
+  $cfgFile = Join-Path $Target '.buildison'
 }
-if (-not (Test-Path $Dir)) { Die "Diretorio invalido: $Dir" }
-$Target = (Resolve-Path $Dir).Path
-if ($Target -eq (Resolve-Path $src).Path) { Die 'O destino nao pode ser o proprio repositorio buildison. Use -Dir.' }
-Ok "Destino: $Target"
 
 # ---------- o que instalar: flags + o que ja esta no projeto (.buildison) ----------
 $presetSet    = [bool]$Preset
@@ -383,8 +401,8 @@ $CommandsCsv  = (Split-List $Commands) -join ','
 
 # Um -Preset na linha de comando e uma escolha nova: ai o arquivo e ignorado.
 $projCfg = Join-Path $Target '.buildison'
-if ((Test-Path $projCfg) -and -not $presetSet) {
-  foreach ($line in (Get-Content -LiteralPath $projCfg)) {
+if ((Test-Path -LiteralPath $cfgFile -PathType Leaf) -and -not $presetSet) {
+  foreach ($line in (Get-Content -LiteralPath $cfgFile)) {
     if ($line -notmatch '^\s*(BUILDISON_\w+)=(.*)$') { continue }
     $k = $Matches[1]; $v = $Matches[2].Trim()
     switch ($k) {
@@ -396,11 +414,18 @@ if ((Test-Path $projCfg) -and -not $presetSet) {
       'BUILDISON_COMMANDS'  { if (-not $commandsSet)  { $CommandsCsv = $v;  $commandsSet = $true } }
     }
   }
-  Info "Usando a escolha salva em .buildison (preset $Preset) - passe -Preset pra mudar"
+  Info "Usando a escolha salva em $cfgFile (preset $Preset) - passe -Preset pra mudar"
 }
 
 # ---------- selecao de agentes ----------
 $AgentsCsv = (Split-List $Agents) -join ','
+# No global os agentes ficam salvos e valem mesmo trocando de -Preset: sem isso, "-Global -Preset
+# lite -Yes" depois de um install com codex cairia no default (so claude) e tiraria as skills do Codex.
+if ($Global -and -not $AgentsCsv -and (Test-Path -LiteralPath $globalCfg)) {
+  foreach ($line in (Get-Content -LiteralPath $globalCfg)) {
+    if ($line -match '^\s*BUILDISON_AGENTS=(.*)$') { $AgentsCsv = $Matches[1].Trim() }
+  }
+}
 if (-not $AgentsCsv -and -not $Yes) {
   Write-Host "Quais agentes configurar?" -ForegroundColor White
   Write-Host "  1) Claude Code`n  2) Codex`n  3) OpenCode/Hermes`n  4) Antigravity (Google)`n  5) Todos"
@@ -420,8 +445,30 @@ $selClaude      = Test-Csv $AgentsCsv 'claude'
 $selCodex       = Test-Csv $AgentsCsv 'codex'
 $selOpencode    = Test-Csv $AgentsCsv 'opencode'
 $selAntigravity = Test-Csv $AgentsCsv 'antigravity'
+if ($Global) {
+  if ($selOpencode)    { Warn '-Global: OpenCode ainda nao tem instalacao global - ignorado' }
+  if ($selAntigravity) { Warn '-Global: Antigravity ainda nao tem instalacao global - ignorado' }
+  $selOpencode = $false; $selAntigravity = $false
+  if (-not $selClaude -and -not $selCodex) { Die '-Global funciona com -Agents claude e/ou codex.' }
+}
 
 # ---------- preset ----------
+# No -Global so existem duas versoes: sem e com spec-workflow. Serena, settings.json, CLAUDE.md e
+# docs\agent\ sao por projeto por natureza.
+if ($Global) {
+  if (-not $presetSet -and -not $mcpSet -and -not $partsSet) {
+    if ($Yes) { $Preset = 'files' } else {
+      Write-Host "`nQual versao instalar no global?" -ForegroundColor White
+      Write-Host "  1) Sem spec-workflow - agents, commands e skills. So arquivos."
+      Write-Host "  2) Com spec-workflow - o mesmo + skill e MCP spec-workflow, valendo em todo projeto."
+      $pr = Read-Host "Escolha [1]"
+      $Preset = if ($pr -eq '2') { 'lite' } else { 'files' }
+    }
+    $presetSet = $true
+  }
+  if (-not $Preset) { $Preset = 'files' }
+  if ($Preset -notin @('files', 'lite')) { Die '-Global tem duas versoes: -Preset files (sem spec-workflow) ou -Preset lite (com). Serena e settings.json sao por projeto.' }
+}
 if (-not $presetSet -and -not $mcpSet -and -not $partsSet) {
   if ($Yes) { $Preset = 'full' } else {
     Write-Host "`nO que instalar?" -ForegroundColor White
@@ -486,6 +533,13 @@ foreach ($pair in @(@('skills', $SkillsCsv), @('agents', $SubagentsCsv), @('comm
     if (-not (Test-Path $base) -and -not (Test-Path "$base.md")) { Warn "$($pair[0]): '$n' nao existe no buildison (ignorado) - veja -List" }
   }
 }
+if ($Global) {
+  if (Test-Csv $McpCsv 'serena') { Die '-Global: o Serena e por projeto (precisa do --project). Instale-o no projeto.' }
+  if (Test-Csv $PartsCsv 'settings') {
+    Warn '-Global: settings.json fica de fora (daria permissoes amplas em todo projeto da maquina)'
+    $PartsCsv = ((Split-List $PartsCsv) | Where-Object { $_ -ne 'settings' }) -join ','
+  }
+}
 $hasSpec   = Test-Csv $McpCsv 'spec-workflow'
 $hasSerena = Test-Csv $McpCsv 'serena'
 
@@ -504,10 +558,145 @@ $Tags = @()
 if ($hasSpec)   { $Tags += 'spec' }
 if ($hasSerena) { $Tags += 'serena' }
 if ($McpCsv)    { $Tags += 'mcp' }
-if ($Preset -eq 'full' -or $doInfra) { $Tags += 'infra' }
+if ($Preset -eq 'full' -or $doInfra -or $Global) { $Tags += 'infra' }
 
 $mcpLabel = if ($McpCsv) { $McpCsv } else { 'nenhum' }
 Info "Instalando: preset $Preset | MCP: $mcpLabel | partes: $PartsCsv"
+
+# ---------- -Global: instala pra todos os projetos da maquina ----------
+# O manifest (~\.buildison\global.manifest) lista o que ESTE modo pos no disco. E o que separa
+# item do buildison de item seu: so o que esta nele e sobrescrito ou retirado.
+function Test-ClaudeUserMcp([string]$name) {
+  # Le o ~\.claude.json direto: o `claude mcp get` tambem enxerga o .mcp.json da pasta atual,
+  # e ai um servidor de projeto passaria por global.
+  $f = Join-Path $env:USERPROFILE '.claude.json'
+  if (-not (Test-Path -LiteralPath $f)) { return $false }
+  try { $j = Get-Content -Raw -LiteralPath $f | ConvertFrom-Json } catch { return $false }
+  return [bool]($j.mcpServers -and ($j.mcpServers.PSObject.Properties.Name -contains $name))
+}
+function Move-ToRemoved([string]$path) {
+  if (-not $script:globalBak) {
+    $script:globalBak = Join-Path $globalDir ("removidos-" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+    New-Dir $script:globalBak
+  }
+  $rel = $path.Substring($env:USERPROFILE.Length).TrimStart('\', '/')
+  $to = Join-Path $script:globalBak $rel
+  New-Dir (Split-Path $to -Parent)
+  Move-Item -LiteralPath $path -Destination $to -Force
+}
+function Invoke-ClaudeMcp([string[]]$cliArgs) {
+  # Dois cuidados do PowerShell 5.1: com EAP=Stop, qualquer linha no stderr de um comando nativo
+  # vira excecao; e um `--` solto na linha pode ser engolido pelo parser. Aqui os argumentos vao
+  # como array (o '--' e so mais um valor) e so o exit code decide.
+  $ErrorActionPreference = 'Continue'
+  Push-Location $env:USERPROFILE
+  try { & claude @cliArgs *> $null; return ($LASTEXITCODE -eq 0) } catch { return $false } finally { Pop-Location }
+}
+function Install-Global {
+  $script:globalBak = ''
+  New-Dir $globalDir
+  $old = if (Test-Path -LiteralPath $globalMan) { @(Get-Content -LiteralPath $globalMan) } else { @() }
+  $new = New-Object System.Collections.Generic.List[string]
+  $specCmd = @('npx', '-y', '@pimzino/spec-workflow-mcp@latest', '.')
+  $roots = @(); if ($selClaude) { $roots += 'claude' }; if ($selCodex) { $roots += 'codex' }
+  if ($hasSpec) { Info 'Instalando no global - versao COM spec-workflow' } else { Info 'Instalando no global - versao SEM spec-workflow' }
+
+  # Claude Code le agents/commands/skills de ~\.claude; o Codex so tem skills, em ~\.agents\skills
+  foreach ($root in $roots) {
+    foreach ($part in 'agents', 'commands', 'skills') {
+      if ($root -eq 'codex' -and $part -ne 'skills') { continue }
+      $base = if ($root -eq 'claude') { Join-Path $env:USERPROFILE ".claude\$part" } else { Join-Path $env:USERPROFILE '.agents\skills' }
+      $pdir = Join-Path $src ".claude\$part"
+      if (-not (Test-Path $pdir)) { continue }
+      $n = 0
+      foreach ($item in (Get-ChildItem -LiteralPath $pdir)) {
+        if (-not (Test-ItemSelected $part ($item.Name -replace '\.md$', ''))) { continue }
+        $dst = Join-Path $base $item.Name
+        if ((Test-Path -LiteralPath $dst) -and ($old -notcontains $dst)) {
+          if (-not $Force) { Warn "$dst ja existe e nao foi o buildison que pos la - mantido (-Force sobrescreve)"; continue }
+          Move-ToRemoved $dst
+        }
+        # remove antes de copiar: a copia mescla, e arquivo removido de dentro de uma skill ficaria orfao
+        if (Test-Path -LiteralPath $dst) { Remove-Item -Recurse -Force -LiteralPath $dst }
+        Copy-Tree $item $base
+        $new.Add($dst)
+        $n++
+      }
+      if ($n) { Ok "$base\ ($n)" }
+    }
+  }
+
+  # o que o buildison pos antes e nao entra mais: vai pra ~\.buildison\removidos-*, nao pro lixo
+  $moved = 0
+  foreach ($dst in $old) {
+    if (-not $dst -or $dst.StartsWith('mcp:') -or $new.Contains($dst)) { continue }
+    if (-not (Test-Path -LiteralPath $dst)) { continue }
+    Move-ToRemoved $dst; $moved++
+  }
+  if ($moved) { Warn "$moved item(ns) que o buildison tinha posto no global sairam da selecao - movidos pra $script:globalBak" }
+
+  # ---- MCP spec-workflow: so na versao "com" ----
+  $hasClaudeCli = [bool](Get-Command claude -ErrorAction SilentlyContinue)
+  if ($selClaude) {
+    if ($hasSpec) {
+      if (Test-ClaudeUserMcp 'spec-workflow') {
+        Ok 'Claude: MCP spec-workflow ja esta no escopo user - mantido'
+        if ($old -contains 'mcp:claude:spec-workflow') { $new.Add('mcp:claude:spec-workflow') }
+      } elseif (-not $hasClaudeCli) {
+        Warn "Claude: CLI 'claude' nao esta no PATH - MCP nao registrado. Rode: claude mcp add -s user spec-workflow -- $($specCmd -join ' ')"
+      } else {
+        $okAdd = Invoke-ClaudeMcp (@('mcp', 'add', '-s', 'user', 'spec-workflow', '--') + $specCmd)
+        if ($okAdd) { Ok 'Claude: MCP spec-workflow no escopo user (vale em todo projeto)'; $new.Add('mcp:claude:spec-workflow') }
+        else { Warn "Claude: falhou registrar o MCP. Rode: claude mcp add -s user spec-workflow -- $($specCmd -join ' ')" }
+      }
+    } elseif ($old -contains 'mcp:claude:spec-workflow') {
+      # so tira se foi o -Global que pos: um spec-workflow registrado a mao fica
+      $okRm = $false
+      if ($hasClaudeCli) { $okRm = Invoke-ClaudeMcp @('mcp', 'remove', '-s', 'user', 'spec-workflow') }
+      if ($okRm) { Ok 'Claude: MCP spec-workflow removido do escopo user (versao sem spec-workflow)' }
+      else { Warn 'Claude: nao consegui remover o MCP. Rode: claude mcp remove -s user spec-workflow'; $new.Add('mcp:claude:spec-workflow') }
+    }
+  }
+  $script:codexFailed = $false
+  if ($selCodex) {
+    if ($hasSpec) {
+      if (-not (Update-CodexMcp)) { $script:codexFailed = $true }
+      $new.Add('mcp:codex:spec-workflow')
+    } elseif ($old -contains 'mcp:codex:spec-workflow') {
+      # o ~/.codex/config.toml e o mesmo que os installs por projeto usam: tirar daqui quebraria
+      # projeto que conta com ele. Fica, e voce decide.
+      Info 'Codex: o spec-workflow continua no ~/.codex/config.toml (config compartilhada com projetos) - tire a mao se quiser'
+    }
+  }
+
+  Write-Utf8 $globalMan (($new -join "`n") + "`n")
+  Write-Utf8 $globalCfg ((@(
+    '# buildison - o que esta instalado no GLOBAL (~\.claude e ~\.agents\skills). Rodar',
+    '# "install.ps1 -Global" de novo rele este arquivo; passe -Preset files|lite pra trocar de versao.',
+    "BUILDISON_PRESET=$Preset",
+    "BUILDISON_MCP=$McpCsv",
+    "BUILDISON_PARTS=$PartsCsv",
+    "BUILDISON_SKILLS=$SkillsCsv",
+    "BUILDISON_SUBAGENTS=$SubagentsCsv",
+    "BUILDISON_COMMANDS=$CommandsCsv",
+    "BUILDISON_AGENTS=$($roots -join ',')"
+  ) -join "`n") + "`n")
+
+  if ($doInfra -or $doSerena) { Warn '-Infra/-Serena nao rodam junto com -Global no PowerShell: rode-os num install por projeto, ou use a skill local-infra.' }
+  Write-Host ""
+  if ($script:codexFailed) { Warn 'Codex NAO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo.' }
+  $ver = if ($hasSpec) { 'com' } else { 'sem' }
+  Ok "Global instalado ($($roots -join ',')) - versao $ver spec-workflow"
+  Write-Host "`nProximos passos:" -ForegroundColor White
+  Write-Host '  1. Abra qualquer projeto: agents, commands e skills ja aparecem (reinicie o agente se estiver aberto).'
+  if ($hasSpec -and $selClaude) {
+    Write-Host '  2. Os templates proprios do buildison (.spec-workflow\templates\) so vem no install por projeto;'
+    Write-Host '     no global o spec-workflow usa os templates padrao dele.'
+  }
+  Write-Host '  - Atualizar: rode o mesmo comando de novo. Trocar de versao: -Global -Preset files|lite.'
+  Write-Host '  - Nao instale o buildison tambem por projeto: os itens aparecem duplicados.'
+}
+if ($Global) { Install-Global; exit 0 }
 
 # ---------- core compartilhado ----------
 Info "Instalando core compartilhado..."
@@ -531,6 +720,9 @@ if ($hasSpec -and (Test-Path (Join-Path $src '.spec-workflow\templates'))) {
 # ---------- Claude Code ----------
 if ($selClaude) {
   Info "Configurando Claude Code..."
+  if ((Test-Path -LiteralPath $globalMan) -and (Get-Item -LiteralPath $globalMan).Length -gt 0) {
+    Warn "o buildison tambem esta no global (~\.claude): neste projeto os agents, commands e skills vao aparecer duplicados"
+  }
   foreach ($part in 'agents', 'commands', 'skills') {
     $pdir = Join-Path $src ".claude\$part"
     if (-not (Test-Path $pdir)) { continue }
