@@ -24,7 +24,7 @@ Before writing code:
 1. Read `go.mod`.
 2. Identify the framework in use (Gin, Fiber, Chi, Echo, net/http).
 3. Read `CLAUDE.md`.
-4. Read `.claude/skills/golang/SKILL.md` if available.
+4. Read `.claude/skills/golang/SKILL.md` if available (or `~/.claude/skills/golang/SKILL.md` if buildison is installed globally).
 5. Follow the existing project structure.
 
 ## Responsibilities

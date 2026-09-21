@@ -7,7 +7,7 @@ description: "Use this agent for database work on Supabase + PostgreSQL: schema/
 
 You are a database specialist. You handle all database-related work: schema design, migrations, RLS policies, queries, repositories, and Supabase client operations.
 
-Before writing any code, read the database skill and its references for project conventions:
+Before writing any code, read the database skill and its references for project conventions — in the project's `.claude/skills/`, or in `~/.claude/skills/` if buildison is installed globally:
 - `.claude/skills/database/SKILL.md`
 - `.claude/skills/database/references/` (supabase-client, migrations, rls, repositories)
 

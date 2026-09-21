@@ -19,10 +19,24 @@ Todo o trabalho de escrever config é feito por `scripts/qdrant-mcp.py` — não
 `.mcp.json`, `opencode.json` ou `config.toml` à mão. Ele faz backup `.bak.<epoch>` de
 tudo que toca e só mexe em config que já existe (exceto o `.mcp.json`, que cria se faltar).
 
+O script fica **dentro da pasta desta skill**, que muda conforme a instalação: no projeto
+(`.claude/skills/qdrant-setup/`) ou no global (`~/.claude/skills/qdrant-setup/`, e
+`~/.agents/skills/qdrant-setup/` no Codex). Se o agente te informou a pasta de onde este
+SKILL.md foi carregado, use-a. Senão, localize **uma vez**:
+
 ```bash
-python3 .claude/skills/qdrant-setup/scripts/qdrant-mcp.py --mode local
-python3 .claude/skills/qdrant-setup/scripts/qdrant-mcp.py --mode vps --url https://qdrant.exemplo.com
-python3 .claude/skills/qdrant-setup/scripts/qdrant-mcp.py --remove
+for d in .claude/skills/qdrant-setup ~/.claude/skills/qdrant-setup ~/.agents/skills/qdrant-setup; do
+  [ -f "$d/scripts/qdrant-mcp.py" ] && { cd "$d" && pwd; break; }
+done
+```
+
+e use o **caminho absoluto** que sair dali em todos os comandos seguintes — variável de
+shell não sobrevive de uma chamada pra outra. Abaixo, `<skill>` é essa pasta.
+
+```bash
+python3 <skill>/scripts/qdrant-mcp.py --mode local
+python3 <skill>/scripts/qdrant-mcp.py --mode vps --url https://qdrant.exemplo.com
+python3 <skill>/scripts/qdrant-mcp.py --remove
 ```
 
 Flags: `--mode local|vps` · `--url` (obrigatória em vps) · `--dir` (default: PWD) ·
@@ -89,7 +103,7 @@ Detecte quais agentes o projeto usa e passe só esses em `--agents`:
 `~/.gemini/.../mcp_config.json` → antigravity.
 
 ```bash
-python3 .claude/skills/qdrant-setup/scripts/qdrant-mcp.py --mode local --agents claude
+python3 <skill>/scripts/qdrant-mcp.py --mode local --agents claude
 ```
 
 > **Codex é GLOBAL.** O `~/.codex/config.toml` tem nomes de tabela fixos: existe **um**
@@ -132,7 +146,7 @@ Mesmo script, outro `--mode`. Reveja o passo 2 (a memória não migra) e o passo
 ## Remover
 
 ```bash
-python3 .claude/skills/qdrant-setup/scripts/qdrant-mcp.py --remove
+python3 <skill>/scripts/qdrant-mcp.py --remove
 ```
 
 Tira o `qdrant-memory` dos configs. **Não** apaga a collection nem derruba o container —

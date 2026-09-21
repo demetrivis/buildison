@@ -34,7 +34,9 @@ Before answering:
   - `vps`    → `QDRANT_URL=https://qdrant.<dom>` + `QDRANT_API_KEY=${QDRANT_API_KEY}` (literal — expanded from shell env).
 - **Per agent**: Claude Code reads `.mcp.json`; Codex reads `~/.codex/config.toml`; OpenCode reads `opencode.json`.
 - **Mode switch** is the `qdrant-setup` skill (command `/qdrant`), which runs
-  `.claude/skills/qdrant-setup/scripts/qdrant-mcp.py --mode local|vps [--url ...]`. It updates ONLY the
+  `scripts/qdrant-mcp.py --mode local|vps [--url ...]` from the skill's own folder — the project's
+  `.claude/skills/qdrant-setup/`, or `~/.claude/skills/qdrant-setup/` / `~/.agents/skills/qdrant-setup/`
+  when buildison is installed globally. It updates ONLY the
   MCP configs (preserves `.claude/`, `docs/agent/`, CLAUDE.md) and backs up every file it touches.
   The old `npx buildison switch` **no longer exists** — don't suggest it.
 - **Codex's `~/.codex/config.toml` is GLOBAL**: one `[mcp_servers.qdrant-memory]` for the whole machine,

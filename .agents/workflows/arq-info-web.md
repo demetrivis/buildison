@@ -38,7 +38,8 @@ na tela e na rede.
 - Para localizar padrões e nomear entidades com consistência, reaproveite os **templates de
   saída** da skill `plano-operacao` (`.claude/skills/plano-operacao/SKILL.md` e
   `.claude/skills/plano-operacao/references/` — c4-conventions, data-model-mdm,
-  output-templates). O ERD/MDM e o vocabulário devem casar com os do `arq-info`.
+  output-templates — ou em `~/.claude/skills/plano-operacao/` se o buildison estiver instalado no global).
+  O ERD/MDM e o vocabulário devem casar com os do `arq-info`.
 
 ## Procedimento por fases
 

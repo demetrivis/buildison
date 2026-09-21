@@ -25,7 +25,7 @@ Before writing code:
 2. Confirm NestJS is installed; check `nest-cli.json` and `tsconfig.json`.
 3. Identify ORM (usually Prisma) and read `prisma/schema.prisma` if present.
 4. Read `CLAUDE.md`.
-5. Read `.claude/skills/nestjs/SKILL.md` if available.
+5. Read `.claude/skills/nestjs/SKILL.md` if available (or `~/.claude/skills/nestjs/SKILL.md` if buildison is installed globally).
 6. Follow the existing module/folder structure.
 
 ## Responsibilities

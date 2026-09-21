@@ -23,8 +23,8 @@ Before writing code:
 1. Read the migrations / SQL schema (`migrations/`, `supabase/`, or `db/`).
 2. Confirm PostgREST (or Supabase, which embeds it) is the API layer.
 3. Read `CLAUDE.md`.
-4. Read `.claude/skills/postgrest/SKILL.md` if available.
-5. Read `.claude/skills/database/SKILL.md` for shared Postgres/RLS conventions.
+4. Read `.claude/skills/postgrest/SKILL.md` if available (or `~/.claude/skills/postgrest/SKILL.md` if buildison is installed globally).
+5. Read `.claude/skills/database/SKILL.md` (or `~/.claude/skills/database/SKILL.md` if buildison is installed globally) for shared Postgres/RLS conventions.
 6. Follow existing schema, RLS and naming conventions.
 
 ## Responsibilities

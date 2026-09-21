@@ -24,7 +24,7 @@ Before writing code:
 2. Confirm Prisma is installed.
 3. Read `prisma/schema.prisma`.
 4. Read `CLAUDE.md`.
-5. Read `.claude/skills/prisma/SKILL.md` if available.
+5. Read `.claude/skills/prisma/SKILL.md` if available (or `~/.claude/skills/prisma/SKILL.md` if buildison is installed globally).
 6. Follow existing schema and migration conventions.
 
 ## Responsibilities

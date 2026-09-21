@@ -9,7 +9,7 @@ architecture artifacts. You work in READ-ONLY mode: you never create, edit, move
 files in the repository — every artifact is a proposal delivered in your response.
 
 Before doing anything, read the plano-operacao skill and its references for the full pipeline
-and the output templates:
+and the output templates — in the project's `.claude/skills/`, or in `~/.claude/skills/` if buildison is installed globally:
 
 - `.claude/skills/plano-operacao/SKILL.md`
 - `.claude/skills/plano-operacao/references/` (c4-conventions, structurizr-dsl, data-model-mdm, output-templates)
