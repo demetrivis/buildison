@@ -36,11 +36,14 @@
 #           AGENTS.md, CLAUDE.md e docs/agent/ ficam de fora — descrevem UM projeto.
 #           Rodar de novo atualiza (relê ~/.buildison/global.env). Item que o buildison não pôs lá
 #           é seu e não é sobrescrito; item que ele pôs e saiu da seleção vai pra ~/.buildison/removidos-*.
+#   --plugin-skills <lista|none>  (só com --global) leva pro Codex as skills de plugins do Claude Code
+#           instalados NESTA máquina (ex.: eng-arq). O Codex não roda plugin; o Claude segue usando o
+#           plugin. O conteúdo vem do seu disco, nunca do repo buildison.
 #
 # Agentes suportados: claude, codex, opencode, antigravity (no --global: claude e codex)
 # Flags: --dir <path> --agents <lista> --preset files|lite|full|custom --mcp --parts --skills
 #        --subagents --commands --list --infra/--no-infra --serena/--no-serena
-#        --yes --force --update --global
+#        --yes --force --update --global --plugin-skills
 #
 # Memória vetorial (Qdrant) NÃO é mais instalada aqui: virou a skill 'qdrant-setup'
 # (+ command /qdrant). Peça ao agente "configura a memória" depois de instalar.
@@ -227,6 +230,7 @@ ASSUME_YES=0
 FORCE=0
 UPDATE=0          # atualiza SÓ o boilerplate; preserva o que é do projeto
 GLOBAL=0          # instala em ~/.claude e ~/.agents/skills em vez de num projeto
+PLUGIN_SKILLS_CSV=""; PLUGIN_SKILLS_SET=0   # --global: skills de plugins do Claude que vão pro Codex
 LIST=0
 SETUP_INFRA=""    # "" = perguntar; 1 = sim; 0 = não
 SETUP_SERENA=""   # idem
@@ -265,6 +269,8 @@ while [ $# -gt 0 ]; do
     --force)        FORCE=1; shift;;
     --update)       UPDATE=1; shift;;
     --global)       GLOBAL=1; shift;;
+    --plugin-skills)   PLUGIN_SKILLS_CSV="${2:-}"; PLUGIN_SKILLS_SET=1; shift 2;;
+    --plugin-skills=*) PLUGIN_SKILLS_CSV="${1#*=}"; PLUGIN_SKILLS_SET=1; shift;;
     -h|--help)      sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "Argumento desconhecido: $1 (use --help)";;
   esac
@@ -374,6 +380,15 @@ fi
 if [ "$GLOBAL" -eq 1 ] && [ -z "$AGENTS_CSV" ] && [ -f "$GLOBAL_CFG" ]; then
   AGENTS_CSV="$(sed -n 's/^BUILDISON_AGENTS=//p' "$GLOBAL_CFG" | tr -d '\r')"
 fi
+# idem pras skills de plugin: são escolha sua, não da versão
+if [ "$PLUGIN_SKILLS_SET" -eq 1 ] && [ "$GLOBAL" -eq 0 ]; then
+  die "--plugin-skills só existe com --global (leva skill de plugin do Claude pro ~/.agents/skills do Codex)."
+fi
+if [ "$GLOBAL" -eq 1 ] && [ "$PLUGIN_SKILLS_SET" -eq 0 ] && [ -f "$GLOBAL_CFG" ]; then
+  PLUGIN_SKILLS_CSV="$(sed -n 's/^BUILDISON_PLUGIN_SKILLS=//p' "$GLOBAL_CFG" | tr -d '\r')"
+fi
+case ",$PLUGIN_SKILLS_CSV," in *,none,*) PLUGIN_SKILLS_CSV="";; esac
+PLUGIN_SKILLS_CSV="$(printf '%s' "$PLUGIN_SKILLS_CSV" | tr -d ' ')"
 
 # ---------- seleção de agentes ----------
 SEL_CLAUDE=0; SEL_CODEX=0; SEL_OPENCODE=0; SEL_ANTIGRAVITY=0
@@ -741,8 +756,56 @@ except Exception:
 sys.exit(0 if sys.argv[2] in (d.get("mcpServers") or {}) else 1)
 PYHAS
 }
+plugin_root() { # nome → pasta do plugin do Claude Code instalado nesta máquina (vazio se não achar)
+  # Marketplace fica em installed_plugins.json (com installPath); plugin sincronizado da conta do
+  # claude.ai ("My Uploads" etc.) fica em ~/.claude/plugins/synced/<id>/<nome>/.
+  local py p; py="$(find_python || true)"
+  if [ -n "$py" ]; then
+    "$py" - "$1" <<'PYPLUG' || true
+import glob, json, os, sys
+name, home = sys.argv[1], os.path.expanduser("~")
+try:
+    d = json.load(open(os.path.join(home, ".claude/plugins/installed_plugins.json")))
+    for key, installs in (d.get("plugins") or {}).items():
+        if key.split("@")[0] != name:
+            continue
+        for i in sorted(installs, key=lambda i: i.get("scope") != "user"):
+            if i.get("installPath") and os.path.isdir(i["installPath"]):
+                print(i["installPath"]); sys.exit(0)
+except Exception:
+    pass
+for p in sorted(glob.glob(os.path.join(home, ".claude/plugins/synced/*", name))):
+    if os.path.isfile(os.path.join(p, ".claude-plugin/plugin.json")):
+        print(p); sys.exit(0)
+PYPLUG
+    return 0
+  fi
+  for p in "$HOME"/.claude/plugins/synced/*/"$1"; do
+    [ -f "$p/.claude-plugin/plugin.json" ] && { echo "$p"; return 0; }
+  done
+  return 0
+}
+global_put() { # origem  pasta-destino → 0 instalou · 1 pulou (item seu). Usa old/new/bak do install_global.
+  local src="$1" base="$2" dst
+  dst="$base/$(basename "$src")"
+  if [ -e "$dst" ] && ! grep -qxF "$dst" "$old"; then
+    if [ "$FORCE" -eq 0 ]; then
+      warn "${dst/#$HOME/~} já existe e não foi o buildison que pôs lá — mantido (--force sobrescreve)"
+      return 1
+    fi
+    [ -z "$bak" ] && { bak="$GLOBAL_DIR/removidos-$(date +%s)"; mkdir -p "$bak"; }
+    mkdir -p "$bak/$(dirname "${dst#$HOME/}")"; mv "$dst" "$bak/${dst#$HOME/}"
+  fi
+  mkdir -p "$base"
+  # rm antes do cp: cp -R mescla, e arquivo removido de dentro de uma skill ficaria órfão
+  rm -rf "$dst"
+  cp -R "$src" "$base/"
+  echo "$dst" >> "$new"
+  return 0
+}
 install_global() {
   local old="$WORK/global.old" new="$WORK/global.new" root part item name dst base n moved=0 bak="" agents=""
+  local plug proot left py plugs_ok=""
   local spec_cmd="npx -y @pimzino/spec-workflow-mcp@latest ."
   mkdir -p "$GLOBAL_DIR"
   : > "$new"
@@ -765,24 +828,61 @@ install_global() {
         [ -e "$item" ] || continue
         name="$(basename "$item")"
         item_selected "$part" "${name%.md}" || continue
-        dst="$base/$name"
-        if [ -e "$dst" ] && ! grep -qxF "$dst" "$old"; then
-          if [ "$FORCE" -eq 0 ]; then
-            warn "${dst/#$HOME/~} já existe e não foi o buildison que pôs lá — mantido (--force sobrescreve)"
-            continue
-          fi
-          [ -z "$bak" ] && { bak="$GLOBAL_DIR/removidos-$(date +%s)"; mkdir -p "$bak"; }
-          mkdir -p "$bak/$(dirname "${dst#$HOME/}")"; mv "$dst" "$bak/${dst#$HOME/}"
-        fi
-        mkdir -p "$base"
-        # rm antes do cp: cp -R mescla, e arquivo removido de dentro de uma skill ficaria órfão
-        rm -rf "$dst"
-        cp -R "$item" "$base/"
-        echo "$dst" >> "$new"
-        n=$((n+1))
+        if global_put "$item" "$base"; then n=$((n+1)); fi
       done
       if [ "$n" -gt 0 ]; then ok "${base/#$HOME/~}/ ($n)"; fi
     done
+  done
+
+  # ---- skills de plugins do Claude → Codex (--plugin-skills) ----
+  # O Codex não roda plugin do Claude, mas lê a skill dele se ela estiver em ~/.agents/skills. O
+  # conteúdo vem do plugin instalado NESTA máquina — o repo buildison não carrega nada de terceiro.
+  for plug in $(printf '%s' "$PLUGIN_SKILLS_CSV" | tr ',' ' '); do
+    if [ "$SEL_CODEX" -eq 0 ]; then
+      info "plugin $plug: sem --agents codex não há o que copiar (no Claude ele já vem do próprio plugin)"
+      continue
+    fi
+    proot="$(plugin_root "$plug")"
+    if [ -z "$proot" ] || [ ! -d "$proot/skills" ]; then
+      warn "plugin '$plug' não está instalado no Claude Code desta máquina (ou não tem skills) — pulado"
+      continue
+    fi
+    n=0
+    for item in "$proot/skills"/*; do
+      [ -f "$item/SKILL.md" ] || continue
+      global_put "$item" "$HOME/.agents/skills" || continue
+      n=$((n+1))
+      # ${CLAUDE_PLUGIN_ROOT} só existe dentro do Claude Code: aponta pra pasta da cópia
+      dst="$HOME/.agents/skills/$(basename "$item")"
+      py="$(find_python || true)"
+      if [ -z "$py" ]; then
+        warn "plugin $plug: sem python, não reescrevi \${CLAUDE_PLUGIN_ROOT} em ${dst/#$HOME/~} — as referências da skill podem não abrir no Codex"
+        continue
+      fi
+      left="$("$py" - "$dst" "$(basename "$item")" <<'PYREW'
+import os, sys
+root, name = sys.argv[1], sys.argv[2]
+left = 0
+for dp, _, files in os.walk(root):
+    for f in files:
+        if not f.endswith(".md"):
+            continue
+        p = os.path.join(dp, f)
+        s = open(p, encoding="utf-8").read()
+        t = s
+        for var in ("${CLAUDE_PLUGIN_ROOT}", "$CLAUDE_PLUGIN_ROOT"):
+            t = t.replace(var + "/skills/" + name, root)
+        left += t.count("CLAUDE_PLUGIN_ROOT")
+        if t != s:
+            open(p, "w", encoding="utf-8").write(t)
+print(left)
+PYREW
+)"
+      if [ "${left:-0}" -gt 0 ]; then
+        warn "plugin $plug: ${dst/#$HOME/~} ainda cita \${CLAUDE_PLUGIN_ROOT} fora da própria skill ($left vez(es)) — isso não resolve no Codex"
+      fi
+    done
+    if [ "$n" -gt 0 ]; then ok "~/.agents/skills/ (+$n do plugin $plug · no Claude segue o plugin)"; plugs_ok="${plugs_ok:+$plugs_ok,}$plug"; fi
   done
 
   # o que o buildison pôs antes e não entra mais (trocou de versão, filtrou, tirou um agente):
@@ -844,6 +944,7 @@ BUILDISON_SKILLS=$SKILLS_CSV
 BUILDISON_SUBAGENTS=$SUBAGENTS_CSV
 BUILDISON_COMMANDS=$COMMANDS_CSV
 BUILDISON_AGENTS=$agents
+BUILDISON_PLUGIN_SKILLS=$PLUGIN_SKILLS_CSV
 EOFCFG
 
   [ "$SETUP_INFRA" = "1" ]  && { echo ""; info "Montando local-infra..."; setup_local_infra; }
@@ -851,7 +952,7 @@ EOFCFG
 
   echo ""
   if [ "$CODEX_FAILED" -eq 1 ]; then warn "Codex NÃO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo."; fi
-  ok "Global instalado (${agents}) — versão $( [ "$HAS_SPEC" -eq 1 ] && echo com || echo sem ) spec-workflow"
+  ok "Global instalado (${agents}) — versão $( [ "$HAS_SPEC" -eq 1 ] && echo com || echo sem ) spec-workflow${plugs_ok:+ · + skills de plugin no Codex: $plugs_ok}"
   echo ""
   printf "${c_bold}Próximos passos:${c_reset}\n"
   echo "  1. Abra qualquer projeto: agents, commands e skills já aparecem (reinicie o agente se estiver aberto)."

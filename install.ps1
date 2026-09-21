@@ -29,13 +29,15 @@ e preserva CLAUDE.md, docs\agent\context.md e docs\agent\decisions.md. Nao use -
 
 Agentes: claude, codex, opencode, antigravity (no -Global: claude e codex)
 Flags: -Dir -Agents -Preset -Mcp -Parts -Skills -Subagents -Commands -List -Infra/-NoInfra
-       -Serena/-NoSerena -Yes -Force -Update -Global
+       -Serena/-NoSerena -Yes -Force -Update -Global -PluginSkills
 
   -Global instala agents, commands e skills pra TODOS os projetos da maquina:
     Claude Code -> ~\.claude\{agents,commands,skills}   Codex -> ~\.agents\skills
   Duas versoes: -Preset files (sem spec-workflow, default) ou -Preset lite (com: skill + MCP
   spec-workflow no escopo user do Claude e no ~/.codex/config.toml). Rodar de novo atualiza
   (rele ~\.buildison\global.env). Item que o buildison nao pos la e seu e nao e sobrescrito.
+  -PluginSkills <lista|none> (so com -Global) leva pro Codex as skills de plugins do Claude Code
+  instalados NESTA maquina (ex.: eng-arq). O conteudo vem do seu disco, nunca do repo buildison.
 
   Memoria vetorial (Qdrant) NAO e mais instalada aqui: virou a skill 'qdrant-setup'
   (+ command /qdrant). Peca ao agente "configura a memoria" depois de instalar.
@@ -59,6 +61,7 @@ param(
   [switch]$Force,
   [switch]$Update,
   [switch]$Global,
+  [string[]]$PluginSkills = @(),
   [switch]$Help
 )
 
@@ -426,6 +429,17 @@ if ($Global -and -not $AgentsCsv -and (Test-Path -LiteralPath $globalCfg)) {
     if ($line -match '^\s*BUILDISON_AGENTS=(.*)$') { $AgentsCsv = $Matches[1].Trim() }
   }
 }
+# idem pras skills de plugin: sao escolha sua, nao da versao
+$PluginSkillsCsv = (Split-List $PluginSkills) -join ','
+if ($PSBoundParameters.ContainsKey('PluginSkills') -and -not $Global) {
+  Die '-PluginSkills so existe com -Global (leva skill de plugin do Claude pro ~\.agents\skills do Codex).'
+}
+if ($Global -and -not $PSBoundParameters.ContainsKey('PluginSkills') -and (Test-Path -LiteralPath $globalCfg)) {
+  foreach ($line in (Get-Content -LiteralPath $globalCfg)) {
+    if ($line -match '^\s*BUILDISON_PLUGIN_SKILLS=(.*)$') { $PluginSkillsCsv = $Matches[1].Trim() }
+  }
+}
+if (Test-Csv $PluginSkillsCsv 'none') { $PluginSkillsCsv = '' }
 if (-not $AgentsCsv -and -not $Yes) {
   Write-Host "Quais agentes configurar?" -ForegroundColor White
   Write-Host "  1) Claude Code`n  2) Codex`n  3) OpenCode/Hermes`n  4) Antigravity (Google)`n  5) Todos"
@@ -592,6 +606,44 @@ function Invoke-ClaudeMcp([string[]]$cliArgs) {
   Push-Location $env:USERPROFILE
   try { & claude @cliArgs *> $null; return ($LASTEXITCODE -eq 0) } catch { return $false } finally { Pop-Location }
 }
+function Get-PluginRoot([string]$name) {
+  # Marketplace fica em installed_plugins.json (com installPath); plugin sincronizado da conta do
+  # claude.ai ("My Uploads" etc.) fica em ~\.claude\plugins\synced\<id>\<nome>\.
+  $pdir = Join-Path $env:USERPROFILE '.claude\plugins'
+  $reg = Join-Path $pdir 'installed_plugins.json'
+  if (Test-Path -LiteralPath $reg) {
+    try {
+      $j = Get-Content -Raw -LiteralPath $reg | ConvertFrom-Json
+      foreach ($prop in $j.plugins.PSObject.Properties) {
+        if (($prop.Name -split '@')[0] -ne $name) { continue }
+        foreach ($i in (@($prop.Value) | Sort-Object { $_.scope -ne 'user' })) {
+          if ($i.installPath -and (Test-Path -LiteralPath $i.installPath)) { return $i.installPath }
+        }
+      }
+    } catch { }
+  }
+  $synced = Join-Path $pdir 'synced'
+  if (Test-Path -LiteralPath $synced) {
+    foreach ($d in (Get-ChildItem -LiteralPath $synced -Directory)) {
+      $p = Join-Path $d.FullName $name
+      if (Test-Path -LiteralPath (Join-Path $p '.claude-plugin\plugin.json')) { return $p }
+    }
+  }
+  return ''
+}
+function Add-GlobalItem($item, [string]$base, $old, $new) {
+  # $true = instalou | $false = pulou (item seu). So mexe no que esta no manifest ($old).
+  $dst = Join-Path $base $item.Name
+  if ((Test-Path -LiteralPath $dst) -and ($old -notcontains $dst)) {
+    if (-not $Force) { Warn "$dst ja existe e nao foi o buildison que pos la - mantido (-Force sobrescreve)"; return $false }
+    Move-ToRemoved $dst
+  }
+  # remove antes de copiar: a copia mescla, e arquivo removido de dentro de uma skill ficaria orfao
+  if (Test-Path -LiteralPath $dst) { Remove-Item -Recurse -Force -LiteralPath $dst }
+  Copy-Tree $item $base
+  $new.Add($dst)
+  return $true
+}
 function Install-Global {
   $script:globalBak = ''
   New-Dir $globalDir
@@ -611,19 +663,41 @@ function Install-Global {
       $n = 0
       foreach ($item in (Get-ChildItem -LiteralPath $pdir)) {
         if (-not (Test-ItemSelected $part ($item.Name -replace '\.md$', ''))) { continue }
-        $dst = Join-Path $base $item.Name
-        if ((Test-Path -LiteralPath $dst) -and ($old -notcontains $dst)) {
-          if (-not $Force) { Warn "$dst ja existe e nao foi o buildison que pos la - mantido (-Force sobrescreve)"; continue }
-          Move-ToRemoved $dst
-        }
-        # remove antes de copiar: a copia mescla, e arquivo removido de dentro de uma skill ficaria orfao
-        if (Test-Path -LiteralPath $dst) { Remove-Item -Recurse -Force -LiteralPath $dst }
-        Copy-Tree $item $base
-        $new.Add($dst)
-        $n++
+        if (Add-GlobalItem $item $base $old $new) { $n++ }
       }
       if ($n) { Ok "$base\ ($n)" }
     }
+  }
+
+  # ---- skills de plugins do Claude -> Codex (-PluginSkills) ----
+  # O Codex nao roda plugin do Claude, mas le a skill dele em ~\.agents\skills. O conteudo vem do
+  # plugin instalado NESTA maquina - o repo buildison nao carrega nada de terceiro.
+  $plugsOk = @()
+  foreach ($plug in (Split-List $PluginSkillsCsv)) {
+    if (-not $selCodex) { Info "plugin ${plug}: sem -Agents codex nao ha o que copiar (no Claude ele ja vem do proprio plugin)"; continue }
+    $proot = Get-PluginRoot $plug
+    if (-not $proot -or -not (Test-Path -LiteralPath (Join-Path $proot 'skills'))) {
+      Warn "plugin '$plug' nao esta instalado no Claude Code desta maquina (ou nao tem skills) - pulado"; continue
+    }
+    $n = 0
+    $cbase = Join-Path $env:USERPROFILE '.agents\skills'
+    foreach ($item in (Get-ChildItem -LiteralPath (Join-Path $proot 'skills') -Directory)) {
+      if (-not (Test-Path -LiteralPath (Join-Path $item.FullName 'SKILL.md'))) { continue }
+      if (-not (Add-GlobalItem $item $cbase $old $new)) { continue }
+      $n++
+      # ${CLAUDE_PLUGIN_ROOT} so existe dentro do Claude Code: aponta pra pasta da copia
+      $dst = Join-Path $cbase $item.Name
+      $dstFwd = $dst -replace '\\', '/'
+      $left = 0
+      foreach ($f in (Get-ChildItem -LiteralPath $dst -Recurse -File -Filter '*.md')) {
+        $t = [IO.File]::ReadAllText($f.FullName)
+        $u = $t.Replace('${CLAUDE_PLUGIN_ROOT}/skills/' + $item.Name, $dstFwd).Replace('$CLAUDE_PLUGIN_ROOT/skills/' + $item.Name, $dstFwd)
+        $left += ([regex]::Matches($u, 'CLAUDE_PLUGIN_ROOT')).Count
+        if ($u -ne $t) { Write-Utf8 $f.FullName $u }
+      }
+      if ($left) { Warn "plugin ${plug}: $dst ainda cita CLAUDE_PLUGIN_ROOT fora da propria skill ($left vez(es)) - isso nao resolve no Codex" }
+    }
+    if ($n) { Ok "$cbase\ (+$n do plugin $plug | no Claude segue o plugin)"; $plugsOk += $plug }
   }
 
   # o que o buildison pos antes e nao entra mais: vai pra ~\.buildison\removidos-*, nao pro lixo
@@ -679,14 +753,16 @@ function Install-Global {
     "BUILDISON_SKILLS=$SkillsCsv",
     "BUILDISON_SUBAGENTS=$SubagentsCsv",
     "BUILDISON_COMMANDS=$CommandsCsv",
-    "BUILDISON_AGENTS=$($roots -join ',')"
+    "BUILDISON_AGENTS=$($roots -join ',')",
+    "BUILDISON_PLUGIN_SKILLS=$PluginSkillsCsv"
   ) -join "`n") + "`n")
 
   if ($doInfra -or $doSerena) { Warn '-Infra/-Serena nao rodam junto com -Global no PowerShell: rode-os num install por projeto, ou use a skill local-infra.' }
   Write-Host ""
   if ($script:codexFailed) { Warn 'Codex NAO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo.' }
   $ver = if ($hasSpec) { 'com' } else { 'sem' }
-  Ok "Global instalado ($($roots -join ',')) - versao $ver spec-workflow"
+  $plugTxt = if ($plugsOk.Count) { " | + skills de plugin no Codex: $($plugsOk -join ',')" } else { '' }
+  Ok "Global instalado ($($roots -join ',')) - versao $ver spec-workflow$plugTxt"
   Write-Host "`nProximos passos:" -ForegroundColor White
   Write-Host '  1. Abra qualquer projeto: agents, commands e skills ja aparecem (reinicie o agente se estiver aberto).'
   if ($hasSpec -and $selClaude) {

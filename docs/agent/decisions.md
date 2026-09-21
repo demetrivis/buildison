@@ -16,6 +16,27 @@ Formato por entrada:
 
 ---
 
+## 2026-09-21 — `--plugin-skills`: skill de plugin do Claude vai pro Codex, sem entrar no repo
+
+**Contexto:** o usuário quer as duas versões do global (com e sem spec-workflow) **mais o eng-arq**, um
+plugin do Claude Code sincronizado da conta dele no claude.ai ("My Uploads", autor "Xanfro"). O
+buildison não tinha nada disso, o Codex não roda plugin do Claude, e a autoria do plugin é incerta.
+
+**Decisão:** flag genérica `--plugin-skills <lista|none>` (só com `--global`): acha o plugin instalado na
+máquina (installed_plugins.json, depois `~/.claude/plugins/synced/*/<nome>`), copia as `skills/` dele pro
+`~/.agents/skills` do Codex pelo mesmo manifest do global, e reescreve `${CLAUDE_PLUGIN_ROOT}` pra pasta
+da cópia. No Claude não copia nada — ele já tem o plugin. A escolha fica no `global.env` e sobrevive à
+troca de `--preset`, então "com eng-arq" vale pras duas versões.
+
+**Motivo:** o buildison é público (GitHub + npm). Copiar o conteúdo do eng-arq pra `.claude/skills` do
+repo publicaria material de autoria incerta. Tirar do disco do usuário na hora do install dá o mesmo
+resultado pra ele sem publicar nada — e funciona pra qualquer plugin, não só esse. Alternativa descartada:
+o buildison virar marketplace e instalar o plugin — exigiria hospedar o conteúdo, e o Codex continuaria sem.
+
+**Impacto:** o eng-arq continua dependendo da conta do usuário estar sincronizada na máquina; em máquina
+sem o plugin, a flag avisa e pula. Os commands do plugin não vão pro Codex (ele não tem commands em arquivo).
+A cópia no Codex é um retrato: plugin atualizado exige rodar o `--global` de novo.
+
 ## 2026-09-21 — Instalação global (`--global`) com duas versões e manifest
 
 **Contexto:** instalar o buildison projeto a projeto obriga a repetir o install em cada repo e a manter

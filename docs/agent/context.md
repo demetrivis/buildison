@@ -64,6 +64,10 @@ O mesmo vale pro `scripts/qdrant-mcp.py` da skill `qdrant-setup`: ele escreve no
 **manifest** (`~/.buildison/global.manifest`): só o que está listado ali é sobrescrito ou retirado; o
 resto em `~/.claude` é do usuário. Por isso **caminho de skill em agent/skill nunca é só
 `.claude/skills/...`** — diga também onde fica no global, ou use a pasta da própria skill.
+`--plugin-skills <nome>` leva pro Codex a skill de um plugin do Claude instalado **na máquina**
+(installed_plugins.json ou `~/.claude/plugins/synced/`), reescrevendo `${CLAUDE_PLUGIN_ROOT}`.
+**Nunca vendorize plugin de terceiro no repo** — ele é público (GitHub + npm); o conteúdo vem do disco
+do usuário na hora do install.
 
 ## Convenções específicas
 

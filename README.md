@@ -166,6 +166,30 @@ install por projeto — no global o spec-workflow usa os templates padrão dele.
 `settings.json` (permissões amplas em todo projeto seria demais) e o Serena (precisa do `--project`).
 OpenCode e Antigravity ainda não têm instalação global.
 
+### Skills de plugins do Claude no Codex (`--plugin-skills`)
+
+Plugin do Claude Code (de marketplace, ou sincronizado da sua conta do claude.ai) **não roda no Codex** —
+mas a skill dele roda, se estiver em `~/.agents/skills`. O `--plugin-skills` faz essa ponte:
+
+```bash
+# buildison + eng-arq, SEM spec-workflow
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \
+  | bash -s -- --global --plugin-skills eng-arq --agents claude,codex --yes
+
+# buildison + eng-arq, COM spec-workflow
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \
+  | bash -s -- --global --preset lite --plugin-skills eng-arq --agents claude,codex --yes
+```
+
+- O conteúdo vem do plugin **instalado na sua máquina** — o buildison não carrega nada de terceiro no repo.
+  Plugin que não está instalado ali é pulado com aviso.
+- **No Claude nada muda:** ele continua usando o plugin (sem duplicar a skill). Os commands do plugin
+  (`/eng-arq:arquitetar` etc.) seguem só no Claude — o Codex não tem commands em arquivo.
+- `${CLAUDE_PLUGIN_ROOT}` só existe dentro do Claude Code; na cópia ele é reescrito pra pasta da skill no
+  Codex, senão as referências da skill não abririam.
+- A escolha fica salva como as outras: trocar de versão (`--preset files|lite`) mantém as skills de plugin.
+  Pra tirar: `--plugin-skills none`. Plugin atualizado? Rode o mesmo comando de novo.
+
 **Atualizar** é rodar o mesmo comando de novo: a escolha fica em `~/.buildison/global.env` e é relida.
 **Trocar de versão** é passar o outro `--preset` — da com pra sem, a skill e o MCP do spec-workflow saem.
 
