@@ -101,6 +101,10 @@ Todas já morderam de verdade neste repo:
   cortar bloco, rode `git diff` e leia **todas** as linhas `-`, não só as que você esperava.
 - **O `install.ps1` não tem como ser executado nesta máquina** (sem `pwsh`). Mudança nele é revisada,
   não testada — diga isso explicitamente ao entregar.
+- **Doc do produto muda debaixo de você.** Em julho o Antigravity não tinha agente por arquivo e usava
+  workflows; em setembro tinha `.agents/agents/`, skills em pasta, e workflows deprecados. Antes de mexer
+  no `gen-antigravity.mjs`, leia a doc atual: `https://antigravity.google/llms.txt` (e `<página>.md`). O `agy`
+  local só lista agentes com login feito — sem login, `agy agents` sai com 0 e não imprime nada.
 - **O bloco `# >>> buildison >>>` do Codex guarda MCP que não é do buildison** — quem edita o
   `~/.codex/config.toml` à mão põe servidor próprio lá dentro. Regravar só o trio conhecido apagava
   isso em silêncio (aconteceu com o `computer-use`). O `keep` varre o bloco inteiro; ao mexer nele,

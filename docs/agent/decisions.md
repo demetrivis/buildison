@@ -16,6 +16,27 @@ Formato por entrada:
 
 ---
 
+## 2026-09-21 — `.agents/` no formato atual do Antigravity: skills em pasta, commands como skill, agents
+
+**Contexto:** a camada do Antigravity foi desenhada em 2026-07-08, quando ele não registrava agente por
+arquivo e usava workflows. A doc atual (antigravity.google/llms.txt) mostra outro produto: skills no padrão
+Agent Skills (`.agents/skills/<pasta>/SKILL.md`), custom subagents em `.agents/agents/<nome>.md`, e workflows
+**deprecados, saindo em 2026-11-01**. O gerador produzia skill como arquivo solto (formato que o padrão não
+descobre) e commands como workflow (que vão parar de funcionar).
+
+**Decisão:** o `gen-antigravity.mjs` copia cada skill como pasta inteira, converte cada command em skill (o
+Antigravity faz de toda skill um `/<nome>`), e gera `.agents/agents/<nome>.md` para os 14 agents com
+frontmatter só de `name` + `description` e os caminhos `.claude/skills/` reescritos para `.agents/skills/`.
+O instalador remove, por marca do gerador, os arquivos do formato antigo que ele mesmo criou.
+
+**Motivo:** o `tools` do Claude não tem equivalente — e a doc avisa que tool com nome inválido trava o
+subagente, então omitir é mais seguro que traduzir. Converter command em skill em vez de manter workflow
+evita uma quebra com data marcada. A remoção por marca protege workflow/skill escrito à mão.
+
+**Impacto:** projetos com Antigravity precisam de `--update` para trocar de formato. O MCP do Antigravity
+continua no config global — a doc agora aceita `.agents/mcp_config.json` por workspace, que resolveria o
+"último projeto instalado vence"; fica para outra mudança. Validado só por doc: o `agy` local estava sem login.
+
 ## 2026-09-21 — `--plugin-skills`: skill de plugin do Claude vai pro Codex, sem entrar no repo
 
 **Contexto:** o usuário quer as duas versões do global (com e sem spec-workflow) **mais o eng-arq**, um

@@ -889,26 +889,43 @@ if ($selOpencode) {
 if ($selAntigravity) {
   Info "Configurando Antigravity..."
   $agentsSrc = Join-Path $src '.agents'
-  if (Test-Path $agentsSrc) {
-    $ns = 0; $nw = 0
-    $skDir = Join-Path $agentsSrc 'skills'
-    if (Test-Path $skDir) {
-      foreach ($f in (Get-ChildItem -LiteralPath $skDir)) {
-        if (Test-ItemSelected 'skills' ($f.Name -replace '\.md$', '')) { Copy-Tree $f (Join-Path $Target '.agents\skills'); $ns++ }
+  $skDir = Join-Path $agentsSrc 'skills'
+  if (Test-Path $skDir) {
+    # Formato antigo deste instalador: skill como .agents\skills\<nome>.md solto, e commands/agentes
+    # como .agents\workflows\<nome>.md. Workflows saem do Antigravity em 2026-11-01, arquivo solto nao
+    # e skill no padrao atual, e os dois duplicariam os /comandos novos. So sai o que tem a marca do
+    # gerador - o que voce escreveu a mao fica.
+    $legacy = 0
+    foreach ($d in 'skills', 'workflows') {
+      $ld = Join-Path $Target ".agents\$d"
+      if (-not (Test-Path -LiteralPath $ld)) { continue }
+      foreach ($f in (Get-ChildItem -LiteralPath $ld -File -Filter '*.md')) {
+        if ((Get-Content -Raw -LiteralPath $f.FullName) -match 'por gen-antigravity\.mjs') { Remove-Item -Force -LiteralPath $f.FullName; $legacy++ }
       }
     }
-    $wfDir = Join-Path $agentsSrc 'workflows'
-    if (Test-Path $wfDir) {
-      foreach ($f in (Get-ChildItem -LiteralPath $wfDir)) {
-        $name = $f.Name -replace '\.md$', ''
-        $part = if (Test-Path (Join-Path $src ".claude\commands\$name.md")) { 'commands' }
-                elseif (Test-Path (Join-Path $src ".claude\agents\$name.md")) { 'agents' } else { '' }
-        if (-not $part -or (Test-ItemSelected $part $name)) { Copy-Tree $f (Join-Path $Target '.agents\workflows'); $nw++ }
+    $wfOld = Join-Path $Target '.agents\workflows'
+    if ((Test-Path -LiteralPath $wfOld) -and -not (Get-ChildItem -LiteralPath $wfOld -Force)) { Remove-Item -Force -LiteralPath $wfOld }
+    if ($legacy) { Info "Antigravity: $legacy arquivo(s) do formato antigo (skill solta / workflow) removidos" }
+    $ns = 0; $nc = 0; $na = 0
+    $skDst = Join-Path $Target '.agents\skills'
+    foreach ($f in (Get-ChildItem -LiteralPath $skDir -Directory)) {
+      # command convertido em skill segue o filtro de commands; o resto, o de skills
+      $part = if (Test-Path (Join-Path $src ".claude\commands\$($f.Name).md")) { 'commands' } else { 'skills' }
+      if (-not (Test-ItemSelected $part $f.Name)) { continue }
+      $prevSkill = Join-Path $skDst $f.Name
+      if (Test-Path -LiteralPath $prevSkill) { Remove-Item -Recurse -Force -LiteralPath $prevSkill }   # a copia mescla: arquivo que saiu da skill ficaria orfao
+      Copy-Tree $f $skDst
+      if ($part -eq 'commands') { $nc++ } else { $ns++ }
+    }
+    $agDir = Join-Path $agentsSrc 'agents'
+    if (Test-Path $agDir) {
+      foreach ($f in (Get-ChildItem -LiteralPath $agDir -File -Filter '*.md')) {
+        if (Test-ItemSelected 'agents' ($f.Name -replace '\.md$', '')) { Copy-Tree $f (Join-Path $Target '.agents\agents'); $na++ }
       }
     }
-    Ok ".agents\ ($ns skills, $nw workflows)"
+    Ok ".agents\ ($ns skills + $nc commands como skill, $na agents)"
   } else {
-    Warn ".agents\ nao existe na fonte - rode 'node scripts/gen-antigravity.mjs' no repo buildison."
+    Warn ".agents\skills nao existe na fonte - rode 'node scripts/gen-antigravity.mjs' no repo buildison."
   }
   if (-not $McpCsv) {
     Ok "Antigravity: sem MCP neste preset - config global do Gemini nao foi tocado"

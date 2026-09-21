@@ -7,8 +7,9 @@
 > **Fonte única, lida por todos os agentes** — Claude Code, Codex, MiniMax, Hermes/OpenCode, Cursor, Antigravity:
 > - **Claude Code** lê `CLAUDE.md`, que faz `@AGENTS.md` + `@docs/agent/context.md` no boot.
 > - **Demais agentes** leem `AGENTS.md` nativamente (e, por instrução abaixo, o `context.md`). O **Antigravity**
->   usa `.agents/` só para **skills + workflows** (gerado de `.claude/` por `scripts/gen-antigravity.mjs`);
->   ele **não** registra agente custom via arquivo — subagentes são orquestrados internamente.
+>   recebe ainda o `.agents/` (gerado de `.claude/` por `scripts/gen-antigravity.mjs`): **skills** em
+>   `.agents/skills/<nome>/SKILL.md` — os commands entram como skill e viram `/<nome>` — e **agents** em
+>   `.agents/agents/<nome>.md`, que ele usa como subagentes.
 >
 > Em conflito de regra de comportamento, **este arquivo prevalece**.
 

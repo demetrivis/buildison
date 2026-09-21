@@ -1155,34 +1155,46 @@ if [ "$SEL_OPENCODE" -eq 1 ]; then
 fi
 
 # ---------- Antigravity (Google) — AGENTS.md nativo + .agents/ + MCP global ----------
-# O Antigravity lê AGENTS.md da raiz (já copiado no core). Aqui espelhamos skills/workflows
-# em .agents/ (com os mesmos filtros do .claude/) e registramos a toolbox MCP no config GLOBAL
+# O Antigravity lê AGENTS.md da raiz (já copiado no core). Aqui espelhamos skills (pastas no padrão
+# Agent Skills; commands entram como skill e viram /<nome>) e agents (.agents/agents/<nome>.md) com os
+# mesmos filtros do .claude/, e registramos a toolbox MCP no config GLOBAL
 # do Antigravity (não é por-projeto): ~/.gemini/config/mcp_config.json (fallback
 # ~/.gemini/antigravity/mcp_config.json). Global e sem CWD confiável → caminhos ABSOLUTOS.
 if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
   info "Configurando Antigravity..."
-  if [ -d "$SRC_DIR/.agents" ]; then
-    n=0; w=0
+  if [ -d "$SRC_DIR/.agents/skills" ]; then
+    # Formato antigo deste instalador: skill como .agents/skills/<nome>.md solto, e commands/agentes
+    # como .agents/workflows/<nome>.md. Workflows saem do Antigravity em 2026-11-01, arquivo solto não
+    # é skill no padrão atual, e os dois duplicariam os /comandos novos. Só sai o que tem a marca do
+    # gerador — o que você escreveu à mão fica.
+    legacy=0
+    for f in "$TARGET_DIR/.agents/skills"/*.md "$TARGET_DIR/.agents/workflows"/*.md; do
+      [ -f "$f" ] || continue
+      grep -q "por gen-antigravity.mjs" "$f" || continue
+      rm -f "$f"; legacy=$((legacy+1))
+    done
+    rmdir "$TARGET_DIR/.agents/workflows" 2>/dev/null || true
+    if [ "$legacy" -gt 0 ]; then info "Antigravity: $legacy arquivo(s) do formato antigo (skill solta / workflow) removidos"; fi
+    n=0; c=0; a=0
     for f in "$SRC_DIR/.agents/skills"/*; do
-      [ -e "$f" ] || continue
-      name="$(basename "$f")"; name="${name%.md}"
-      if item_selected skills "$name"; then
-        mkdir -p "$TARGET_DIR/.agents/skills"; cp -Rf "$f" "$TARGET_DIR/.agents/skills/"; n=$((n+1))
-      fi
+      [ -d "$f" ] || continue
+      name="$(basename "$f")"
+      # command convertido em skill segue o filtro de commands; o resto, o de skills
+      if [ -e "$SRC_DIR/.claude/commands/$name.md" ]; then part=commands; else part=skills; fi
+      item_selected "$part" "$name" || continue
+      mkdir -p "$TARGET_DIR/.agents/skills"
+      rm -rf "$TARGET_DIR/.agents/skills/$name"   # cp -R mescla: arquivo que saiu da skill ficaria órfão
+      cp -R "$f" "$TARGET_DIR/.agents/skills/"
+      if [ "$part" = commands ]; then c=$((c+1)); else n=$((n+1)); fi
     done
-    for f in "$SRC_DIR/.agents/workflows"/*; do
-      [ -e "$f" ] || continue
-      name="$(basename "$f")"; name="${name%.md}"
-      part=""
-      if [ -e "$SRC_DIR/.claude/commands/$name.md" ]; then part=commands
-      elif [ -e "$SRC_DIR/.claude/agents/$name.md" ]; then part=agents; fi
-      if [ -z "$part" ] || item_selected "$part" "$name"; then
-        mkdir -p "$TARGET_DIR/.agents/workflows"; cp -Rf "$f" "$TARGET_DIR/.agents/workflows/"; w=$((w+1))
-      fi
+    for f in "$SRC_DIR/.agents/agents"/*.md; do
+      [ -f "$f" ] || continue
+      item_selected agents "$(basename "$f" .md)" || continue
+      mkdir -p "$TARGET_DIR/.agents/agents"; cp -f "$f" "$TARGET_DIR/.agents/agents/"; a=$((a+1))
     done
-    ok ".agents/ ($n skills, $w workflows)"
+    ok ".agents/ ($n skills + $c commands como skill, $a agents)"
   else
-    warn ".agents/ não existe na fonte — rode 'node scripts/gen-antigravity.mjs' no repo buildison."
+    warn ".agents/skills não existe na fonte — rode 'node scripts/gen-antigravity.mjs' no repo buildison."
   fi
   if [ -z "$MCP_CSV" ]; then
     ok "Antigravity: sem MCP neste preset — config global do Gemini não foi tocado"

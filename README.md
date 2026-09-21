@@ -323,7 +323,7 @@ do diretório; passe `--collection` ao script dela pra usar outro.
 | **Claude Code** | `.claude/` + `CLAUDE.md` (`@imports`) + `.mcp.json` |
 | **Codex** | `AGENTS.md` (nativo) + bloco MCP em `~/.codex/config.toml` |
 | **OpenCode/Hermes** | `AGENTS.md` (nativo) + `opencode.json` |
-| **Antigravity** | `AGENTS.md` (nativo) + `.agents/` (skills + workflows) + MCP no config global do Gemini |
+| **Antigravity** | `AGENTS.md` (nativo) + `.agents/skills/` (skills e commands) + `.agents/agents/` + MCP no config global do Gemini |
 | _(todos)_ | `AGENTS.md` + `docs/agent/context.md` + `docs/agent/decisions.md` |
 
 <details>
@@ -341,11 +341,19 @@ Uma tabela declarada duas vezes é TOML inválido, e aí o Codex descarta a conf
 O preset `files` não toca no `config.toml`. `serena` e `spec-workflow` funcionam em qualquer projeto (resolvem pelo
 CWD), mas a `COLLECTION_NAME` do Qdrant no global aponta para um projeto só — o último que instalou memória.
 
-**Antigravity** lê o `AGENTS.md` da raiz nativamente. O que ele reconhece por arquivo é **skill** e **workflow**
-— não existe "agente custom" registrável (os subagentes Browser/Terminal são orquestrados pela IDE). Por isso o
-`.agents/` gerado tem só `skills/` e `workflows/`, sem roster. Os workflows viram slash-commands (`/commit`,
-`/pr`, `/tlg`…), e os agentes de missão (`arq-info`, `arq-info-web`, `design-system-extractor`) também. Os
-agentes de camada (api, db, …) não têm equivalente — as convenções deles já vivem nas skills.
+**Antigravity** (2.0, CLI `agy` e IDE) lê o `AGENTS.md` da raiz nativamente. O resto vai no `.agents/`, no
+formato da doc oficial ([llms.txt](https://antigravity.google/llms.txt) — toda página tem versão `.md`):
+
+- **Skills** em `.agents/skills/<nome>/SKILL.md` — a **pasta inteira**, no padrão Agent Skills, então
+  `references/` e `scripts/` vão junto. Os **commands** do buildison também entram como skill: no Antigravity
+  toda skill vira `/<nome>` sozinha (`/commit`, `/pr`, `/tlg`…).
+- **Agents** em `.agents/agents/<nome>.md` — viram subagentes que o agente principal delega (e dá pra
+  escolher como agente principal no `/agents`). O frontmatter leva só `name` e `description`: o `tools` fica
+  de fora de propósito, porque os nomes do Claude (`Read`, `Bash`…) não existem lá e a doc avisa que nome de
+  tool inválido **trava** o subagente.
+- **Workflows não são mais gerados** — o Antigravity os descontinua em 1º de novembro de 2026. Num `--update`,
+  o instalador remove os workflows e as skills soltas (`.agents/skills/<nome>.md`) que **ele mesmo** gerou nas
+  versões antigas; o que você escreveu à mão fica.
 
 O MCP do Antigravity também é **global** (`~/.gemini/.../mcp_config.json`), gravado com o caminho absoluto do
 projeto atual. Confira em _Settings › Customizations › Open MCP Config_.
@@ -509,8 +517,8 @@ CLAUDE.md              # bridge Claude Code → @AGENTS.md + @docs/agent/context
                        # plano-operacao
 
 .agents/               # glue p/ Antigravity (gerado de .claude/)
-├── skills/
-└── workflows/
+├── skills/            # uma pasta por skill + uma por command (vira /<nome>)
+└── agents/            # subagentes
 
 docs/
 ├── agent/             # DINÂMICO: context.md (mapa do projeto) + decisions.md (log)
