@@ -499,6 +499,10 @@ $doSerena = if ($Serena) { $true } elseif ($NoSerena -or $Yes -or -not $hasSeren
   (Read-Host "  [s/N]") -match '^[sSyY]'
 }
 
+# ---------- tags: o que existe neste projeto (filtra AGENTS.md, templates e itens) ----------
+$Tags = @()
+if ($hasSpec)   { $Tags += 'spec' }
+if ($hasSerena) { $Tags += 'serena' }
 if ($McpCsv)    { $Tags += 'mcp' }
 if ($Preset -eq 'full' -or $doInfra) { $Tags += 'infra' }
 
