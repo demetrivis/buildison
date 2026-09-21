@@ -1154,12 +1154,33 @@ if [ "$SEL_OPENCODE" -eq 1 ]; then
   ok "OpenCode: AGENTS.md (lido nativamente da raiz do projeto)"
 fi
 
-# ---------- Antigravity (Google) — AGENTS.md nativo + .agents/ + MCP global ----------
+antigravity_global_pinned() { # servidores de projeto presos no config GLOBAL do Antigravity (1 por linha)
+  local py c; py="$(find_python || true)"; [ -n "$py" ] || return 0
+  for c in "$HOME/.gemini/config/mcp_config.json" "$HOME/.gemini/antigravity/mcp_config.json"; do
+    [ -f "$c" ] || continue
+    "$py" - "$c" <<'PYPIN' || true
+import json, sys
+path = sys.argv[1]
+try:
+    servers = json.load(open(path)).get("mcpServers") or {}
+except Exception:
+    sys.exit(0)
+for name in ("spec-workflow", "serena", "qdrant-memory"):
+    s = servers.get(name)
+    if not isinstance(s, dict):
+        continue
+    # caminho absoluto nos args (projeto fixo) ou coleção fixa do Qdrant = preso a um projeto
+    fixed = [a for a in (s.get("args") or []) if isinstance(a, str) and (a.startswith("/") or a[1:3] == ":\\")]
+    coll = (s.get("env") or {}).get("COLLECTION_NAME")
+    if fixed or coll:
+        print(f"{name} → {fixed[0] if fixed else 'COLLECTION_NAME=' + coll}  ({path})")
+PYPIN
+  done
+}
+# ---------- Antigravity (Google) — AGENTS.md nativo + .agents/ + MCP por projeto ----------
 # O Antigravity lê AGENTS.md da raiz (já copiado no core). Aqui espelhamos skills (pastas no padrão
 # Agent Skills; commands entram como skill e viram /<nome>) e agents (.agents/agents/<nome>.md) com os
-# mesmos filtros do .claude/, e registramos a toolbox MCP no config GLOBAL
-# do Antigravity (não é por-projeto): ~/.gemini/config/mcp_config.json (fallback
-# ~/.gemini/antigravity/mcp_config.json). Global e sem CWD confiável → caminhos ABSOLUTOS.
+# mesmos filtros do .claude/, e registramos a toolbox MCP no config DO PROJETO: .agents/mcp_config.json.
 if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
   info "Configurando Antigravity..."
   if [ -d "$SRC_DIR/.agents/skills" ]; then
@@ -1196,39 +1217,30 @@ if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
   else
     warn ".agents/skills não existe na fonte — rode 'node scripts/gen-antigravity.mjs' no repo buildison."
   fi
+  # MCP de projeto vai no config DO PROJETO (.agents/mcp_config.json), nunca no global. O global
+  # (~/.gemini/config/mcp_config.json) vale pra todo projeto aberto no Antigravity: gravar ali
+  # prendia serena, spec-workflow e qdrant-memory a UM projeto em todos os outros, e a memória de
+  # um projeto ia parar na coleção de outro. Caminhos relativos, igual ao .mcp.json do Claude.
   if [ -z "$MCP_CSV" ]; then
-    ok "Antigravity: sem MCP neste preset — config global do Gemini não foi tocado"
-  elif ! PY="$(find_python)"; then
-    warn "Antigravity: python não encontrado — MCP não registrado. Adicione à mão em ~/.gemini/.../mcp_config.json"
+    ok "Antigravity: sem MCP neste preset — .agents/mcp_config.json não gerado"
   else
-    # localiza o mcp_config.json: primeiro candidato existente vence, senão o default
-    AG_CFG=""
-    for c in "$HOME/.gemini/config/mcp_config.json" "$HOME/.gemini/antigravity/mcp_config.json"; do
-      [ -f "$c" ] && { AG_CFG="$c"; break; }
-    done
-    [ -z "$AG_CFG" ] && AG_CFG="$HOME/.gemini/config/mcp_config.json"
-    mkdir -p "$(dirname "$AG_CFG")"
-    [ -f "$AG_CFG" ] && cp "$AG_CFG" "$AG_CFG.bak.$(date +%s 2>/dev/null || echo bak)" 2>/dev/null || true
-    # merge: mexe SÓ nas chaves escolhidas, preserva o resto do config global
-    "$PY" - "$AG_CFG" "$TARGET_DIR" "$MCP_CSV" <<'PY'
-import json, os, sys
-path, proj, wanted = sys.argv[1:4]
-wanted = wanted.split(",")
-try:
-    d = json.load(open(path))
-    if not isinstance(d, dict): d = {}
-except Exception:
-    d = {}
-servers = d.setdefault("mcpServers", {})
-if "spec-workflow" in wanted:
-    servers["spec-workflow"] = {"command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", proj]}
-if "serena" in wanted:
-    servers["serena"] = {"command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", proj, "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"]}
-os.makedirs(os.path.dirname(path), exist_ok=True)
-with open(path, "w") as f:
-    json.dump(d, f, indent=2); f.write("\n")
-PY
-    ok "Antigravity: MCP em $AG_CFG (${MCP_CSV})"
+    ENTRIES=""
+    if [ "$HAS_SPEC" -eq 1 ]; then
+      add_entry '    "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] }'
+    fi
+    if [ "$HAS_SERENA" -eq 1 ]; then
+      add_entry '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }'
+    fi
+    mkdir -p "$TARGET_DIR/.agents"
+    merge_mcp_json "$TARGET_DIR/.agents/mcp_config.json" mcpServers \
+      "$(printf '{\n  "mcpServers": {\n%s\n  }\n}\n' "$ENTRIES")" "spec-workflow,serena"
+    ok "Antigravity: MCP em .agents/mcp_config.json (${MCP_CSV}) — só neste projeto"
+  fi
+  AG_PINNED="$(antigravity_global_pinned)"
+  if [ -n "$AG_PINNED" ]; then
+    warn "O config GLOBAL do Antigravity prende MCP a um projeto — vale em TODO projeto que você abrir:"
+    printf '%s\n' "$AG_PINNED" | sed 's/^/    /'
+    warn "Tire essas chaves de lá (backup antes). Instalações antigas do buildison gravavam no global; esta não grava mais."
   fi
   ok "Antigravity: AGENTS.md (lido nativamente da raiz)"
 fi

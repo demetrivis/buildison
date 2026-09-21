@@ -102,7 +102,12 @@ echo 'export QDRANT_API_KEY=<key>' >> ~/.zshrc && source ~/.zshrc
 
 Detecte quais agentes o projeto usa e passe só esses em `--agents`:
 `.mcp.json` → claude · `opencode.json` → opencode · `~/.codex/config.toml` → codex ·
-`~/.gemini/.../mcp_config.json` → antigravity.
+`.agents/` no projeto → antigravity (grava em `.agents/mcp_config.json`, **nunca** no global do
+Antigravity — o global vale pra todo projeto aberto nele e misturaria a memória dos projetos).
+
+> Se o `.agents/` do projeto é **gerado por um script dele** (tem `.agents/GERADO.md`, ex.:
+> `pnpm sync:agents`), o script da skill não escreve lá: atualize o `.mcp.json` e rode o gerador do
+> projeto, senão o check de sincronia do CI quebra.
 
 ```bash
 python3 <skill>/scripts/qdrant-mcp.py --mode local --agents claude

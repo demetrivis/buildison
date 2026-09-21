@@ -16,6 +16,28 @@ Formato por entrada:
 
 ---
 
+## 2026-09-21 — MCP do Antigravity por projeto; o global não é mais tocado
+
+**Contexto:** a decisão de 2026-07-08 gravava a toolbox MCP no config **global** do Antigravity
+(`~/.gemini/config/mcp_config.json`), com o caminho absoluto do último projeto instalado. Como o global vale
+pra todo projeto aberto no Antigravity, `serena`, `spec-workflow` e `qdrant-memory` ficaram presos ao
+`crm-confortese` em qualquer projeto — e a memória de outros projetos ia parar na coleção
+`agent_crm_confortese`. Achado e limpo no global pela sessão do vibedesign (decisão "MCP de projeto nunca no
+global do Antigravity", no `docs/agent/decisions.md` de lá), que pediu a correção do instalador.
+
+**Decisão:** o instalador e o `qdrant-mcp.py` da `qdrant-setup` gravam em `.agents/mcp_config.json` do
+projeto, com caminhos relativos e merge que preserva servidor não gerenciado. O global não é mais escrito;
+se ele ainda tiver `spec-workflow`/`serena`/`qdrant-memory` com caminho absoluto ou coleção fixa, o
+instalador **avisa** e não apaga — o global é do usuário. Projeto cujo `.agents/` é gerado por script
+próprio (`.agents/GERADO.md`) é pulado pelo `qdrant-mcp.py`, pra não quebrar o check de sincronia do CI.
+
+**Motivo:** isolamento entre projetos — memória vetorial de um projeto nunca pode vazar pra outro.
+
+**Impacto:** de carona, o `install.ps1` ganhou o `Merge-McpJson`: o merge do `.mcp.json` que preserva o
+`qdrant-memory` do `/qdrant` existia só no bash desde 09b0404, então no Windows o `--update` ainda apagava a
+memória. Ressalva: a doc do Antigravity documenta o `.agents/mcp_config.json`, mas a sessão do vibedesign não
+conseguiu confirmá-lo no `agy` 1.2.6 (o `agy mcp list` só lê o global). Validar com login feito.
+
 ## 2026-09-21 — `.agents/` no formato atual do Antigravity: skills em pasta, commands como skill, agents
 
 **Contexto:** a camada do Antigravity foi desenhada em 2026-07-08, quando ele não registrava agente por

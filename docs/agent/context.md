@@ -55,6 +55,10 @@ O `install.sh` emite config pros 4 agentes em **pontos distintos** do arquivo (C
 meio-aplicadas por semanas: o commit `fceaae7` corrigiu só o template e deixou o instalador intacto.
 O mesmo vale pro `scripts/qdrant-mcp.py` da skill `qdrant-setup`: ele escreve nos mesmos 4 pontos.
 
+**MCP de projeto nunca vai pra config global de agente.** Claude usa `.mcp.json`, Antigravity usa
+`.agents/mcp_config.json` (ambos com caminho relativo). O Codex é a exceção forçada (só tem config global):
+lá `serena`/`spec-workflow` resolvem pelo CWD, mas a `COLLECTION_NAME` do Qdrant fica presa a um projeto.
+
 **O instalador não configura Qdrant.** Memória vetorial é opt-in pela skill `qdrant-setup` (command
 `/qdrant`). O installer só emite `spec-workflow` e `serena`.
 

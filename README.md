@@ -355,8 +355,12 @@ formato da doc oficial ([llms.txt](https://antigravity.google/llms.txt) — toda
   o instalador remove os workflows e as skills soltas (`.agents/skills/<nome>.md`) que **ele mesmo** gerou nas
   versões antigas; o que você escreveu à mão fica.
 
-O MCP do Antigravity também é **global** (`~/.gemini/.../mcp_config.json`), gravado com o caminho absoluto do
-projeto atual. Confira em _Settings › Customizations › Open MCP Config_.
+O MCP do Antigravity vai no **`.agents/mcp_config.json` do projeto**, com caminhos relativos (igual ao
+`.mcp.json` do Claude) — **nunca** no global `~/.gemini/config/mcp_config.json`. O global vale pra todo projeto
+aberto no Antigravity: as versões antigas do instalador gravavam lá com o caminho absoluto do "último projeto
+instalado", e aí serena, spec-workflow e a memória Qdrant de **um** projeto apareciam em **todos** (memória de um
+projeto indo pra coleção de outro). Se o global ainda tiver servidor preso a um projeto, o instalador avisa —
+não apaga sozinho, porque o global é seu.
 
 Regenerar o `.agents/` a partir do `.claude/`:
 

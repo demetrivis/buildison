@@ -78,7 +78,8 @@ como fonte de verdade.
 <!-- bld:if mcp -->
 ## Toolbox de agentes (MCP)
 
-Config dos MCPs: [`.mcp.json`](.mcp.json) (Claude Code) · `~/.codex/config.toml` (Codex) · `opencode.json` (OpenCode).
+Config dos MCPs: [`.mcp.json`](.mcp.json) (Claude Code) · `~/.codex/config.toml` (Codex) · `opencode.json` (OpenCode) ·
+`.agents/mcp_config.json` (Antigravity — sempre por projeto, nunca no global do Antigravity).
 
 <!-- bld:if spec -->
 - **SpecWorkflow** — planejamento: requirements → design → tasks. MCP `spec-workflow` · skill `spec-workflow`.

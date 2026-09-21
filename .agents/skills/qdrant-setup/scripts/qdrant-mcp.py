@@ -92,16 +92,20 @@ def do_opencode(target, env, remove):
     return f"opencode.json (backup {b})"
 
 
-def do_antigravity(env, remove):
-    path = ""
-    for c in (
-        os.path.expanduser("~/.gemini/config/mcp_config.json"),
-        os.path.expanduser("~/.gemini/antigravity/mcp_config.json"),
-    ):
-        if os.path.exists(c):
-            path = c
-            break
-    if not path:
+def do_antigravity(target, env, remove):
+    """MCP de projeto vai no .agents/mcp_config.json DO PROJETO, nunca no global do Antigravity
+    (~/.gemini/config/mcp_config.json): o global vale pra todo projeto aberto nele, e a coleção
+    deste projeto passaria a receber a memória dos outros. Só entra se o projeto usa Antigravity."""
+    agents = os.path.join(target, ".agents")
+    if not os.path.isdir(agents):
+        return None
+    if os.path.exists(os.path.join(agents, "GERADO.md")):
+        # .agents/ gerado por script do próprio projeto (ex.: pnpm sync:agents, com CI checando a
+        # sincronia): escrever aqui quebraria o check. A fonte é o .mcp.json — rode o gerador.
+        print("antigravity: PULADO — o .agents/ é gerado pelo projeto; rode o gerador dele (ex.: pnpm sync:agents)")
+        return None
+    path = os.path.join(agents, "mcp_config.json")
+    if remove and not os.path.exists(path):
         return None
     b = backup(path)
     d = load_json(path)
@@ -111,7 +115,16 @@ def do_antigravity(env, remove):
     else:
         servers["qdrant-memory"] = {"command": "uvx", "args": ["mcp-server-qdrant"], "env": env}
     save_json(path, d)
-    return f"{path} (backup {b})"
+    return f".agents/mcp_config.json{f' (backup {b})' if b else ' (criado)'}"
+
+
+def antigravity_global_pinned():
+    """qdrant-memory preso no config GLOBAL do Antigravity (resto de instalação antiga)."""
+    for c in ("~/.gemini/config/mcp_config.json", "~/.gemini/antigravity/mcp_config.json"):
+        p = os.path.expanduser(c)
+        if "qdrant-memory" in (load_json(p).get("mcpServers") or {}):
+            return c
+    return None
 
 
 def toml_env_line(env):
@@ -198,7 +211,7 @@ def main():
     if "codex" in want:
         done.append(do_codex(env, a.remove))
     if "antigravity" in want:
-        done.append(do_antigravity(env, a.remove))
+        done.append(do_antigravity(target, env, a.remove))
 
     verb = "removido de" if a.remove else "registrado em"
     touched = [d for d in done if d]
@@ -210,6 +223,10 @@ def main():
     print(f"qdrant-memory {verb}:")
     for d in touched:
         print(f"  - {d}")
+    g = antigravity_global_pinned() if "antigravity" in want else None
+    if g:
+        print(f"aviso: {g} (GLOBAL do Antigravity) tem qdrant-memory — vale em TODO projeto aberto nele e")
+        print("       mistura a memória dos projetos. Tire de lá (backup antes); o deste projeto fica em .agents/.")
 
 
 if __name__ == "__main__":

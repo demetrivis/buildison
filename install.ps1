@@ -793,6 +793,47 @@ if ($hasSpec -and (Test-Path (Join-Path $src '.spec-workflow\templates'))) {
   Ok ".spec-workflow\templates\"
 }
 
+# ---------- JSON de MCP: regrava preservando o que o instalador nao gerencia ----------
+# O arquivo e montado do zero a cada run; sem o merge, um MCP que voce (ou a skill qdrant-setup)
+# adicionou sumia em silencio no proximo -Update.
+function Merge-McpJson([string]$path, [string]$freshJson, [string[]]$managed) {
+  $fresh = [ordered]@{}
+  foreach ($p in ($freshJson | ConvertFrom-Json).mcpServers.PSObject.Properties) { $fresh[$p.Name] = $p.Value }
+  $obj = $null
+  if (Test-Path -LiteralPath $path) { try { $obj = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json } catch { $obj = $null } }
+  if ($null -eq $obj) { $obj = [pscustomobject]@{} }
+  $servers = [ordered]@{}
+  if ($obj.mcpServers) {
+    foreach ($p in $obj.mcpServers.PSObject.Properties) {
+      # tira so o que ESTE instalador gerencia e nao foi pedido agora; o resto fica
+      if (($managed -contains $p.Name) -and -not $fresh.Contains($p.Name)) { continue }
+      $servers[$p.Name] = $p.Value
+    }
+  }
+  foreach ($k in $fresh.Keys) { $servers[$k] = $fresh[$k] }
+  $obj | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([pscustomobject]$servers) -Force
+  New-Dir (Split-Path $path -Parent)
+  Write-Utf8 $path (($obj | ConvertTo-Json -Depth 16) + "`n")
+}
+# servidores de projeto presos no config GLOBAL do Antigravity (caminho absoluto ou colecao fixa)
+function Get-AntigravityGlobalPinned {
+  $out = @()
+  foreach ($c in @((Join-Path $env:USERPROFILE '.gemini\config\mcp_config.json'), (Join-Path $env:USERPROFILE '.gemini\antigravity\mcp_config.json'))) {
+    if (-not (Test-Path -LiteralPath $c)) { continue }
+    try { $j = Get-Content -Raw -LiteralPath $c | ConvertFrom-Json } catch { continue }
+    if (-not $j.mcpServers) { continue }
+    foreach ($name in 'spec-workflow', 'serena', 'qdrant-memory') {
+      $sv = $j.mcpServers.$name
+      if (-not $sv) { continue }
+      $fixed = @($sv.args | Where-Object { $_ -is [string] -and $_ -match '^(/|[A-Za-z]:[\\/])' })
+      $coll = if ($sv.env) { $sv.env.COLLECTION_NAME } else { $null }
+      if ($fixed.Count) { $out += "$name -> $($fixed[0])  ($c)" }
+      elseif ($coll)    { $out += "$name -> COLLECTION_NAME=$coll  ($c)" }
+    }
+  }
+  return $out
+}
+
 # ---------- Claude Code ----------
 if ($selClaude) {
   Info "Configurando Claude Code..."
@@ -845,7 +886,7 @@ if ($selClaude) {
     $entries = @()
     if ($hasSpec)   { $entries += '    "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] }' }
     if ($hasSerena) { $entries += '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }' }
-    Write-Utf8 (Join-Path $Target '.mcp.json') ("{`n  `"mcpServers`": {`n" + ($entries -join ",`n") + "`n  }`n}`n")
+    Merge-McpJson (Join-Path $Target '.mcp.json') ("{`n  `"mcpServers`": {`n" + ($entries -join ",`n") + "`n  }`n}`n") @('spec-workflow', 'serena')
     Ok ".mcp.json ($McpCsv)"
   } else {
     Ok "Claude: sem MCP neste preset - .mcp.json nao gerado"
@@ -883,9 +924,7 @@ if ($selOpencode) {
   Ok "OpenCode: AGENTS.md (lido nativamente da raiz do projeto)"
 }
 
-# ---------- Antigravity (Google) - AGENTS.md nativo + .agents/ + MCP global ----------
-# Config GLOBAL (nao por-projeto): usa caminho ABSOLUTO do projeto.
-# Windows: ~/.gemini/antigravity/mcp_config.json  (fallback ~/.gemini/config/mcp_config.json).
+# ---------- Antigravity (Google) - AGENTS.md nativo + .agents/ + MCP por projeto ----------
 if ($selAntigravity) {
   Info "Configurando Antigravity..."
   $agentsSrc = Join-Path $src '.agents'
@@ -927,28 +966,23 @@ if ($selAntigravity) {
   } else {
     Warn ".agents\skills nao existe na fonte - rode 'node scripts/gen-antigravity.mjs' no repo buildison."
   }
+  # MCP de projeto vai no config DO PROJETO (.agents\mcp_config.json), nunca no global. O global
+  # vale pra todo projeto aberto no Antigravity: gravar ali prendia serena, spec-workflow e
+  # qdrant-memory a UM projeto em todos os outros. Caminhos relativos, igual ao .mcp.json do Claude.
   if (-not $McpCsv) {
-    Ok "Antigravity: sem MCP neste preset - config global do Gemini nao foi tocado"
+    Ok "Antigravity: sem MCP neste preset - .agents\mcp_config.json nao gerado"
   } else {
-    $agCands = @(
-      (Join-Path $env:USERPROFILE '.gemini\antigravity\mcp_config.json'),
-      (Join-Path $env:USERPROFILE '.gemini\config\mcp_config.json')
-    )
-    $agCfg = $agCands | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if (-not $agCfg) { $agCfg = $agCands[0] }
-    if (Test-Path $agCfg) {
-      Copy-Item $agCfg "$agCfg.bak.$([DateTimeOffset]::Now.ToUnixTimeSeconds())" -Force
-      $agObj = Get-Content $agCfg -Raw | ConvertFrom-Json
-    } else { $agObj = [pscustomobject]@{} }
-    if (-not $agObj.mcpServers) { $agObj | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([pscustomobject]@{}) -Force }
-    if ($hasSpec) {
-      $agObj.mcpServers | Add-Member -NotePropertyName 'spec-workflow' -Force -NotePropertyValue ([pscustomobject][ordered]@{ command = 'npx'; args = @('-y', '@pimzino/spec-workflow-mcp@latest', $Target) })
-    }
-    if ($hasSerena) {
-      $agObj.mcpServers | Add-Member -NotePropertyName 'serena' -Force -NotePropertyValue ([pscustomobject][ordered]@{ command = 'serena'; args = @('start-mcp-server', '--context', 'ide-assistant', '--project', $Target, '--enable-web-dashboard', 'false', '--open-web-dashboard', 'false', '--enable-gui-log-window', 'false') })
-    }
-    Write-Utf8 $agCfg (($agObj | ConvertTo-Json -Depth 16) + "`n")
-    Ok "Antigravity: MCP em $agCfg ($McpCsv)"
+    $entries = @()
+    if ($hasSpec)   { $entries += '    "spec-workflow": { "command": "npx", "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "."] }' }
+    if ($hasSerena) { $entries += '    "serena": { "command": "serena", "args": ["start-mcp-server", "--context", "ide-assistant", "--project", ".", "--enable-web-dashboard", "false", "--open-web-dashboard", "false", "--enable-gui-log-window", "false"] }' }
+    Merge-McpJson (Join-Path $Target '.agents\mcp_config.json') ("{`n  `"mcpServers`": {`n" + ($entries -join ",`n") + "`n  }`n}`n") @('spec-workflow', 'serena')
+    Ok "Antigravity: MCP em .agents\mcp_config.json ($McpCsv) - so neste projeto"
+  }
+  $agPinned = @(Get-AntigravityGlobalPinned)
+  if ($agPinned.Count) {
+    Warn 'O config GLOBAL do Antigravity prende MCP a um projeto - vale em TODO projeto que voce abrir:'
+    foreach ($l in $agPinned) { Write-Host "    $l" }
+    Warn 'Tire essas chaves de la (backup antes). Instalacoes antigas do buildison gravavam no global; esta nao grava mais.'
   }
   Ok "Antigravity: AGENTS.md (lido nativamente da raiz)"
 }
