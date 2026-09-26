@@ -72,7 +72,17 @@ function Info($m){ Write-Host "> $m"  -ForegroundColor Cyan }
 function Ok($m)  { Write-Host "OK $m" -ForegroundColor Green }
 function Warn($m){ Write-Host "! $m"  -ForegroundColor Yellow }
 function Fail($m){ Write-Host "x $m"  -ForegroundColor Red }
-function Die($m) { Fail $m; exit 1 }
+# Rodando via `irm | iex` ou `[scriptblock]::Create`, o script nao e um arquivo: `exit` fecharia a
+# JANELA do PowerShell e a mensagem de erro sumiria junto. Por isso erro vira `throw` (para o script,
+# a janela fica e, com -File, o exit code ainda e 1) e saida normal e `return`.
+$script:tmpSrc = ''
+function Remove-TempDirs {
+  # o clone do buildison em %TEMP% e a pasta de trabalho: sem isso, cada execucao deixava ~3 MB pra tras
+  foreach ($d in @($script:tmpSrc, $script:work)) {
+    if ($d -and (Test-Path -LiteralPath $d)) { Remove-Item -Recurse -Force -LiteralPath $d -ErrorAction SilentlyContinue }
+  }
+}
+function Die($m) { Fail $m; Remove-TempDirs; throw "buildison: $m" }
 
 if ($Help) { Get-Help $PSCommandPath -Detailed; return }
 
@@ -345,6 +355,7 @@ $src = $PSScriptRoot
 if (-not $src -or -not (Test-Path (Join-Path $src 'install.sh')) -or -not (Test-Path (Join-Path $src 'bin\buildison.mjs'))) {
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Die 'git e necessario para baixar o buildison.' }
   $src = Join-Path $env:TEMP ('buildison-' + [guid]::NewGuid().ToString('N'))
+  $script:tmpSrc = $src
   Info "Baixando buildison para $src ..."
   git clone --depth 1 $RepoUrl $src 2>$null | Out-Null
   if ($LASTEXITCODE -ne 0) { Die "Falha ao clonar $RepoUrl" }
@@ -368,7 +379,7 @@ if ($List) {
   Write-Host ("Commands (-Commands): " + ((Get-ItemNames 'commands') -join ' '))
   Write-Host "`nDependencias (saem sozinhas se a peca nao for instalada, a menos que voce peca pelo nome):"
   Write-Host "  skill spec-workflow -> spec-workflow | skill local-infra -> infra | agent suporte -> algum MCP"
-  Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+  Remove-TempDirs
   return
 }
 Ok "Fonte: $src"
@@ -837,7 +848,7 @@ function Install-Global {
   Write-Host '  - Atualizar: rode o mesmo comando de novo. Trocar de versao: -Global -Preset files|lite.'
   Write-Host '  - Nao instale o buildison tambem por projeto: os itens aparecem duplicados.'
 }
-if ($Global) { Install-Global; exit 0 }
+if ($Global) { Install-Global; Remove-TempDirs; return }
 
 # ---------- core compartilhado ----------
 Info "Instalando core compartilhado..."
@@ -1200,4 +1211,4 @@ $steps.Add("Preencha docs\agent\context.md com o stack real do projeto.")
 Write-Host "`nProximos passos:" -ForegroundColor White
 for ($i = 0; $i -lt $steps.Count; $i++) { Write-Host ("  {0}. {1}" -f ($i + 1), $steps[$i]) }
 
-Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+Remove-TempDirs
