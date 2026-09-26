@@ -1,374 +1,619 @@
 # buildison
 
-Toolbox de agentes — agents, commands e skills — a partir de uma **fonte única**, instalada no formato nativo
-de cada agente: **Claude Code, Codex, OpenCode/Hermes e Antigravity**.
+Toolbox de agentes — agents, commands e skills — escrita **uma vez** e instalada no formato nativo de cada
+agente: **Claude Code, Codex, OpenCode/Hermes e Antigravity**.
 
-Sem duplicar conteúdo: `AGENTS.md` + `.claude/` + `docs/agent/` são a fonte; cada agente recebe só o "glue" dele.
+A fonte é única: `AGENTS.md` + `.claude/` + `docs/agent/`. Cada agente recebe só o "glue" dele.
 
 ---
 
 ## Índice
 
-- [Instalar do zero](#instalar-do-zero)
-- [Instalar leve ou sob medida](#instalar-leve-ou-sob-medida) — só os arquivos, sem MCP e sem infra
-- [Instalar no global](#instalar-no-global) — pra todos os projetos da máquina, com ou sem spec-workflow
-- [Atualizar um projeto que já tem buildison](#atualizar-um-projeto-que-já-tem-buildison)
-- [A infra](#a-infra) — local-infra; memória vetorial via `/qdrant`
+- [Início rápido](#início-rápido)
+- [Como os comandos funcionam](#como-os-comandos-funcionam)
+- [Instalar num projeto](#instalar-num-projeto) — presets, agentes, sob medida, browser, infra
+- [Instalar no global](#instalar-no-global) — pra todos os projetos da máquina
+- [Atualizar](#atualizar)
+- [Memória vetorial (Qdrant)](#memória-vetorial-qdrant)
 - [O que cada agente recebe](#o-que-cada-agente-recebe)
-- [Referência](#referência) — agents, commands, skills
+- [A infra local](#a-infra-local)
+- [Referência](#referência) — agents, commands, skills, MCPs
+- [Todas as flags](#todas-as-flags)
 - [Banco de dados via MCP](#banco-de-dados-via-mcp-opcional)
 - [Estrutura do repo](#estrutura-do-repo)
 - [Personalização](#personalização)
 - [Quando algo quebra](#quando-algo-quebra)
+- [Requisitos](#requisitos)
 
 ---
 
-## Instalar do zero
+## Início rápido
 
-Entre na pasta do projeto e rode. O instalador pergunta o destino (default: pasta atual) e quais agentes quer.
+Entre na pasta do projeto e rode. O instalador pergunta o destino, os agentes e o que instalar.
+
+Mac / Linux:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash
 ```
 
-<details>
-<summary>Outras formas de instalar</summary>
-
-Direto do GitHub via npx (sempre a `main`):
-
-```bash
-npx github:demetrivis/buildison install
-```
-
-Do npm (versão publicada — pode estar atrás da `main`):
-
-```bash
-npx buildison@latest install
-```
-
-Clonando o repo:
-
-```bash
-git clone https://github.com/demetrivis/buildison.git
-```
-
-```bash
-bash buildison/install.sh --dir /caminho/do/seu/projeto
-```
-
-</details>
-
-### Sem interação
-
-Escolhendo destino e agentes de uma vez:
-
-```bash
-npx github:demetrivis/buildison install --dir . --agents claude,codex,opencode,antigravity --yes
-```
-
-### Windows (PowerShell nativo)
+Windows (PowerShell):
 
 ```powershell
 irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1 | iex
 ```
 
-Com flags:
-
-```powershell
-.\install.ps1 -Dir C:\caminho\do\projeto -Agents claude,codex,opencode,antigravity -Infra -Serena
-```
-
-> O `curl | bash` e o `npx` também rodam no Windows, mas só via **Git Bash** ou WSL — no PowerShell puro não
-> existe `bash`. Não dê duplo-clique nos scripts.
+Nada fica no seu computador além do que é instalado no projeto: o instalador clona o buildison numa pasta
+temporária e a apaga no fim.
 
 ---
 
-## Instalar leve ou sob medida
+## Como os comandos funcionam
 
-Por padrão o buildison instala tudo (`full`). Se você só quer os **arquivos** — agents, skills e commands — sem
-MCP e sem `local-infra`, escolha um preset:
+Todo exemplo deste README é **o comando base + flags**. Sem flags, o instalador pergunta; com `--yes`
+(`-Yes` no Windows), ele não pergunta nada.
 
-| Preset | O que vem | Precisa na máquina |
-|---|---|---|
-| `files` | `AGENTS.md`, `docs/agent/`, `.claude/agents`, `.claude/commands`, `.claude/skills` (e `.agents/` no Antigravity) | nada |
-| `lite` | `files` + MCP `spec-workflow` + `.spec-workflow/templates/` | Node (`npx`) |
-| `full` _(default)_ | `lite` + MCP `serena` + `.claude/settings.json` | `uv`/Serena |
-| `custom` | pergunta MCPs, partes e itens | depende |
+| Onde | Comando base |
+| :-- | :-- |
+| Mac / Linux | `curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \| bash -s -- <flags>` |
+| Windows | `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) <flags>` |
+
+As flags têm o mesmo nome nos dois, só muda a grafia: `--dir` vira `-Dir`, `--plugin-skills` vira
+`-PluginSkills`. A tabela completa está em [Todas as flags](#todas-as-flags).
+
+> No Windows, o `irm ... | iex` só serve para o modo interativo — ele não aceita flags. Com flags, use a forma
+> `[scriptblock]::Create`. O `curl | bash` e o `npx` também funcionam no Windows, mas só dentro do Git Bash ou
+> do WSL.
+
+Outras formas de rodar o mesmo instalador:
+
+Via npx, direto do GitHub (sempre a `main`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files
+npx github:demetrivis/buildison install --dir . --agents claude --yes
 ```
+
+Via npm (versão publicada — pode estar atrás da `main`):
+
+```bash
+npx buildison@latest install --dir . --agents claude --yes
+```
+
+Com o repo clonado (Mac / Linux):
+
+```bash
+bash buildison/install.sh --dir /caminho/do/projeto --agents claude --yes
+```
+
+Com o repo clonado (Windows):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files
+.\buildison\install.ps1 -Dir C:\caminho\do\projeto -Agents claude -Yes
 ```
 
-No modo interativo o instalador pergunta o preset logo depois dos agentes.
+---
+
+## Instalar num projeto
+
+O padrão instala no **diretório atual**. Para outro, passe `--dir` (`-Dir`).
+
+### Tudo (preset `full`, o padrão)
+
+Agents, commands, skills, MCP `spec-workflow` + `serena` e `.claude/settings.json`.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude -Yes
+```
+
+### Só os arquivos (preset `files`)
+
+Agents, commands, skills, `AGENTS.md`, `CLAUDE.md` e `docs/agent/`. Sem MCP e sem nada instalado na máquina.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,codex --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,codex -Yes
+```
+
+### Arquivos + spec-workflow (preset `lite`)
+
+O `files` mais o MCP `spec-workflow` (planejamento requirements → design → tasks) e os templates em
+`.spec-workflow/templates/`. Roda via `npx`, nada a instalar.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset lite --agents claude,codex --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset lite -Agents claude,codex -Yes
+```
+
+| Preset | O que vem | Precisa na máquina |
+| :-- | :-- | :-- |
+| `files` | `AGENTS.md`, `CLAUDE.md`, `docs/agent/`, `.claude/{agents,commands,skills}` (e `.agents/` no Antigravity) | nada |
+| `lite` | `files` + MCP `spec-workflow` + `.spec-workflow/templates/` | Node (`npx`) |
+| `full` _(padrão)_ | `lite` + MCP `serena` + `.claude/settings.json` | `uv` + Serena |
+| `custom` | pergunta MCPs, partes e itens (só no modo interativo) | depende |
+
+### Escolher os agentes
+
+`--agents` aceita qualquer combinação de `claude`, `codex`, `opencode` e `antigravity`. Sem a flag e com
+`--yes`, instala só para o Claude Code.
+
+Claude Code + Antigravity, as duas IAs no mesmo projeto (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,antigravity --yes
+```
+
+Claude Code + Antigravity (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,antigravity -Yes
+```
+
+Os quatro agentes (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude,codex,opencode,antigravity --yes
+```
+
+Os quatro agentes (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude,codex,opencode,antigravity -Yes
+```
+
+### Em outra pasta
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --dir ~/code/meu-projeto --preset files --agents claude --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Dir C:\code\meu-projeto -Preset files -Agents claude -Yes
+```
 
 ### Sob medida
 
-As flags partem do preset e sobrescrevem só o que você passar:
+As flags partem do preset e trocam só o que você passar:
 
-| bash | PowerShell | Valores |
-|---|---|---|
-| `--mcp` | `-Mcp` | `spec-workflow`, `serena`, `chrome-devtools` ou `none` |
-| `--parts` | `-Parts` | `agents`, `commands`, `skills`, `settings` |
-| `--skills` | `-Skills` | só estas skills |
-| `--subagents` | `-Subagents` | só estes agents |
-| `--commands` | `-Commands` | só estes commands |
-| `--list` | `-List` | mostra tudo que dá pra escolher |
+| Flag | Valores |
+| :-- | :-- |
+| `--mcp` | `spec-workflow`, `serena`, `chrome-devtools` ou `none` |
+| `--parts` | `agents`, `commands`, `skills`, `settings` |
+| `--skills` | só estas skills |
+| `--subagents` | só estes agents |
+| `--commands` | só estes commands |
+
+Mac / Linux:
 
 ```bash
-bash install.sh --dir . --agents claude,codex --mcp spec-workflow --skills golang,nestjs,database --commands commit,pr --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude,codex --mcp spec-workflow --skills golang,nestjs,database --commands commit,pr --yes
 ```
 
-O que depende de uma peça sai sozinho quando ela não é instalada: a
-skill `spec-workflow` só vem com o MCP `spec-workflow`, a `local-infra` só com a infra, e o agent `suporte` só com algum
-MCP. Pedir o item pelo nome força a instalação.
+Windows:
 
-O `AGENTS.md` e os templates de `docs/agent/` também são filtrados: as seções de infra e Serena só aparecem
-no projeto se a peça foi instalada (blocos `<!-- bld:if ... -->` na fonte).
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude,codex -Mcp spec-workflow -Skills golang,nestjs,database -Commands commit,pr -Yes
+```
 
-A escolha fica salva em `.buildison`, na raiz do projeto. As próximas execuções e o `--update` reaproveitam esse
-arquivo — passe outro `--preset` para mudar.
+O que depende de uma peça sai sozinho quando ela não é instalada: a skill `spec-workflow` só vem com o MCP
+`spec-workflow`, a skill `local-infra` só com a infra, e o agent `suporte` só com algum MCP. Pedir o item pelo
+nome força a instalação. O `AGENTS.md` e os templates de `docs/agent/` também são filtrados: as seções de infra
+e Serena só aparecem se a peça foi instalada.
+
+A escolha fica salva em `.buildison`, na raiz do projeto. As próximas execuções e o `--update` reaproveitam
+esse arquivo — passe outro `--preset` para mudar.
+
+### Browser pro agente (chrome-devtools)
+
+Adiciona o MCP `chrome-devtools`, **sempre com `--isolated`**: cada sessão abre um Chrome próprio e
+temporário. Sem isso, todas as sessões usam o mesmo perfil do Chrome, e com duas abertas ao mesmo tempo (dois
+Claudes, ou Claude + Antigravity) a segunda falha com _"The browser is already running"_.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --mcp chrome-devtools --agents claude,antigravity --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Mcp chrome-devtools -Agents claude,antigravity -Yes
+```
+
+Junto com o spec-workflow (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --mcp spec-workflow,chrome-devtools --agents claude,antigravity --yes
+```
+
+Junto com o spec-workflow (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Mcp spec-workflow,chrome-devtools -Agents claude,antigravity -Yes
+```
+
+No fim de **toda** instalação, o instalador procura `chrome-devtools-mcp` sem isolamento nos configs que
+conhece — Claude (escopo user, local e `.mcp.json`), Antigravity (projeto e global), Codex e OpenCode — e avisa
+onde está. `--browserUrl` e `--autoConnect` contam como isolados, porque conectam num Chrome que já existe.
+O preço do `--isolated` é abrir deslogado a cada sessão; para site com login, `--autoConnect` usa o seu Chrome.
+
+### Infra local e Serena
+
+`--infra` monta o `~/local-infra/` (Postgres, Redis, Qdrant e tunnels em Docker, com a senha do Postgres gerada
+na hora). `--serena` instala o CLI do Serena via `uv`.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude --infra --serena --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude -Infra -Serena -Yes
+```
+
+### Ver tudo o que dá pra escolher
+
+Lista presets, MCPs, agents, skills e commands disponíveis, sem instalar nada.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --list
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -List
+```
 
 ---
 
 ## Instalar no global
 
-Em vez de instalar projeto a projeto, `--global` põe agents, commands e skills **na máquina** — valem em
-todo projeto que você abrir, sem nada dentro dele:
+`--global` põe agents, commands e skills **na máquina**: eles passam a valer em todo projeto que você abrir,
+sem nada dentro do projeto.
 
 | Agente | Onde vai |
 | :-- | :-- |
 | Claude Code | `~/.claude/agents`, `~/.claude/commands`, `~/.claude/skills` |
 | Codex | `~/.agents/skills` (o Codex não tem agents nem commands em arquivo) |
 
-Duas versões:
+São duas versões: **sem** spec-workflow (`--preset files`, o padrão) e **com** (`--preset lite`).
+
+### Sem spec-workflow
+
+Mac / Linux:
 
 ```bash
-# SEM spec-workflow (default) — só arquivos
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \
-  | bash -s -- --global --agents claude,codex --yes
-
-# COM spec-workflow — + skill spec-workflow + MCP spec-workflow valendo em todo projeto
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \
-  | bash -s -- --global --preset lite --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --agents claude,codex --yes
 ```
 
-No PowerShell: `.\install.ps1 -Global -Agents claude,codex -Yes` (e `-Preset lite` pra versão com).
+Windows:
 
-Na versão **com**, o MCP entra no **escopo user** do Claude Code (`claude mcp add -s user`) e no
-`~/.codex/config.toml`. Os templates próprios do buildison em `.spec-workflow/templates/` só vêm no
-install por projeto — no global o spec-workflow usa os templates padrão dele.
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Agents claude,codex -Yes
+```
 
-**O que fica de fora**, por ser de um projeto só: `AGENTS.md`, `CLAUDE.md`, `docs/agent/`, o
-`settings.json` (permissões amplas em todo projeto seria demais) e o Serena (precisa do `--project`).
-OpenCode e Antigravity ainda não têm instalação global.
+### Com spec-workflow
 
-### Skills de plugins do Claude no Codex (`--plugin-skills`)
+Registra o MCP no escopo user do Claude Code (`claude mcp add -s user`) e no `~/.codex/config.toml`.
 
-Plugin do Claude Code (de marketplace, ou sincronizado da sua conta do claude.ai) **não roda no Codex** —
-mas a skill dele roda, se estiver em `~/.agents/skills`. O `--plugin-skills` faz essa ponte:
+Mac / Linux:
 
 ```bash
-# buildison + eng-arq, SEM spec-workflow
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \
-  | bash -s -- --global --plugin-skills eng-arq --agents claude,codex --yes
-
-# buildison + eng-arq, COM spec-workflow
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh \
-  | bash -s -- --global --preset lite --plugin-skills eng-arq --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --preset lite --agents claude,codex --yes
 ```
 
-- O conteúdo vem do plugin **instalado na sua máquina** — o buildison não carrega nada de terceiro no repo.
-  Plugin que não está instalado ali é pulado com aviso.
-- **No Claude nada muda:** ele continua usando o plugin (sem duplicar a skill). Os commands do plugin
-  (`/eng-arq:arquitetar` etc.) seguem só no Claude — o Codex não tem commands em arquivo.
-- `${CLAUDE_PLUGIN_ROOT}` só existe dentro do Claude Code; na cópia ele é reescrito pra pasta da skill no
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Preset lite -Agents claude,codex -Yes
+```
+
+### Com o browser (chrome-devtools)
+
+O `chrome-devtools` não depende de projeto, então funciona bem no global — também sempre com `--isolated`.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --mcp chrome-devtools --agents claude,codex --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Mcp chrome-devtools -Agents claude,codex -Yes
+```
+
+### Com skills de plugin do Claude no Codex
+
+Plugin do Claude Code (de marketplace, ou sincronizado da sua conta do claude.ai) não roda no Codex — mas a
+skill dele roda, se estiver em `~/.agents/skills`. O `--plugin-skills` copia a skill do plugin **instalado na
+sua máquina** para lá. O repo do buildison não carrega nada de terceiro.
+
+Exemplo com o plugin `eng-arq`, sem spec-workflow (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --plugin-skills eng-arq --agents claude,codex --yes
+```
+
+Sem spec-workflow (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -PluginSkills eng-arq -Agents claude,codex -Yes
+```
+
+Com spec-workflow (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --preset lite --plugin-skills eng-arq --agents claude,codex --yes
+```
+
+Com spec-workflow (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Preset lite -PluginSkills eng-arq -Agents claude,codex -Yes
+```
+
+Tirar as skills de plugin (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --plugin-skills none --yes
+```
+
+Tirar as skills de plugin (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -PluginSkills none -Yes
+```
+
+- No Claude nada muda: ele continua usando o próprio plugin, sem skill duplicada.
+- `${CLAUDE_PLUGIN_ROOT}` só existe dentro do Claude Code; na cópia ele é trocado pela pasta da skill no
   Codex, senão as referências da skill não abririam.
-- A escolha fica salva como as outras: trocar de versão (`--preset files|lite`) mantém as skills de plugin.
-  Pra tirar: `--plugin-skills none`. Plugin atualizado? Rode o mesmo comando de novo.
+- Plugin que não está instalado na máquina é pulado com aviso.
 
-**Atualizar** é rodar o mesmo comando de novo: a escolha fica em `~/.buildison/global.env` e é relida.
-**Trocar de versão** é passar o outro `--preset` — da com pra sem, a skill e o MCP do spec-workflow saem.
+### Como o global se comporta
 
-O instalador só mexe no que **ele mesmo** pôs lá (`~/.buildison/global.manifest`):
+- **Atualizar** é rodar o mesmo comando de novo. A escolha fica em `~/.buildison/global.env` e é relida —
+  inclusive os agentes e as skills de plugin, mesmo quando você troca de `--preset`.
+- **Trocar de versão** é passar o outro `--preset`. Da versão com para a sem, a skill e o MCP do spec-workflow
+  saem do Claude.
+- O instalador só mexe no que **ele mesmo** pôs lá (lista em `~/.buildison/global.manifest`). Uma skill ou
+  agent **seu** com o mesmo nome de um do buildison é mantido, com aviso (`--force` sobrescreve). Item do
+  buildison que saiu da seleção vai para `~/.buildison/removidos-<data>/`, não para o lixo.
+- No Codex, a versão sem **não** tira o spec-workflow do `~/.codex/config.toml`: esse arquivo é compartilhado
+  com os installs por projeto.
+- Ficam de fora do global, por serem de um projeto só: `AGENTS.md`, `CLAUDE.md`, `docs/agent/`, o
+  `settings.json` e o Serena. OpenCode e Antigravity ainda não têm instalação global.
 
-- skill ou agent **seu** com o mesmo nome de um do buildison é mantido, com aviso (`--force` sobrescreve);
-- item do buildison que saiu da seleção vai pra `~/.buildison/removidos-<data>/`, não pro lixo;
-- no Codex, trocar pra versão sem **não** tira o spec-workflow do `~/.codex/config.toml` — esse arquivo é
-  compartilhado com os installs por projeto, e tirar dali quebraria quem conta com ele.
-
-> **Global ou por projeto, não os dois.** Com os dois, os mesmos agents e skills aparecem duplicados — o
+> **Global ou por projeto, não os dois.** Com os dois, os mesmos agents e skills aparecem duplicados. O
 > install por projeto avisa quando detecta o global.
-
-## Atualizar um projeto que já tem buildison
-
-Entre na pasta do projeto e rode:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --update
-```
-
-Ou, se preferir npx:
-
-```bash
-npx github:demetrivis/buildison install --update
-```
-
-### O que o `--update` faz
-
-Ele separa o que é **boilerplate** (vem do buildison, deve ser atualizado) do que é **seu** (conhecimento do
-projeto, nunca sobrescrito):
-
-| Atualiza | Preserva |
-|---|---|
-| `AGENTS.md` | `docs/agent/context.md` |
-| `.claude/`, `.agents/` | `docs/agent/decisions.md` |
-| `.spec-workflow/templates/` | `CLAUDE.md` (se já existe) |
-| `.mcp.json` | `COLLECTION_NAME` já configurada no `.mcp.json` |
-
-Faz `.bak` de tudo que muda e lista arquivos em `.claude/` que não existem mais na fonte — sem deletar, porque
-o seu `.claude/` pode ter agents e skills próprios. Respeita o preset salvo em `.buildison`.
-
-> ### ⚠️ Não use `--force` para atualizar
->
-> O `--force` **apaga** o `docs/agent/context.md` e o `docs/agent/decisions.md`. Ele existe para regravar tudo
-> do zero, não para atualizar. Para atualizar é sempre `--update`.
 
 ---
 
-## A infra
+## Atualizar
 
-O buildison assume um stack de desenvolvimento **global** em `~/local-infra/` — sobe uma vez e atende todos os
-projetos da máquina. Hostname: `localhost` no host, `host.docker.internal` de dentro de container.
+### Um projeto que já tem buildison
 
-| Serviço | Porta | Para quê |
-|---|---|---|
-| **Postgres** | `5432` | Um database por projeto |
-| **Redis** | `6379` | Um número de DB por projeto (`/0`, `/1`, …) |
-| **Qdrant** | `6333` / `6334` | Memória vetorial dos agentes |
-| **ngrok** | `4040` | URL pública efêmera (teste rápido) |
-| **cloudflared** | — | Tunnel nomeado, URL estável no seu domínio |
+Entre na pasta do projeto.
 
-### Montar a infra
-
-Junto da instalação (monta o `~/local-infra/` com senha do Postgres gerada aleatoriamente):
+Mac / Linux:
 
 ```bash
-npx github:demetrivis/buildison install --infra --serena
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --update --yes
 ```
 
-- **`--infra`** → monta o `~/local-infra/`. A senha do Postgres vai pro `~/local-infra/.env` e aparece no fim.
-- **`--serena`** → instala o Serena no host via `uv`.
+Windows:
 
-Use `--no-infra` / `--no-serena` para pular sem ser perguntado.
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Update -Yes
+```
 
-### Subir e derrubar
+O `--update` separa o que é **boilerplate** (vem do buildison) do que é **seu** (conhecimento do projeto):
+
+| Atualiza | Preserva |
+| :-- | :-- |
+| `AGENTS.md` | `CLAUDE.md` (se já existe) |
+| `.claude/` e `.agents/` | `docs/agent/context.md` |
+| `.spec-workflow/templates/` | `docs/agent/decisions.md` |
+| `.mcp.json` e `.agents/mcp_config.json` | servidores MCP que o instalador não gerencia (ex.: o `qdrant-memory` do `/qdrant`) |
+
+Faz `.bak` do que muda e lista arquivos em `.claude/` que não existem mais na fonte — sem apagar, porque o seu
+`.claude/` pode ter agents e skills próprios. Respeita o preset salvo em `.buildison`. No Antigravity, remove o
+formato antigo que ele mesmo gerou (workflows e skills em arquivo solto); o que você escreveu à mão fica.
+
+> **Não use `--force` para atualizar.** O `--force` **apaga** o `docs/agent/context.md` e o
+> `docs/agent/decisions.md` — ele existe para regravar tudo do zero. Para atualizar é sempre `--update`.
+
+### O global
+
+É rodar de novo o mesmo comando do [global](#instalar-no-global): ele relê a escolha salva.
+
+Mac / Linux:
 
 ```bash
-cd ~/local-infra && docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --yes
 ```
 
-```bash
-cd ~/local-infra && docker compose down
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Yes
 ```
 
-> `down` mantém os volumes — os dados sobrevivem.
+---
 
-### Memória vetorial (Qdrant) — via `/qdrant`, não pelo instalador
+## Memória vetorial (Qdrant)
 
-**O instalador não configura Qdrant.** Memória vetorial é opt-in: instale o buildison normalmente e,
-quando quiser memória persistente, peça ao agente — **`/qdrant`** (skill `qdrant-setup`).
+**O instalador não configura Qdrant.** Memória vetorial é opcional: instale o buildison normalmente e, quando
+quiser memória persistente no projeto, peça ao agente:
 
-A skill faz tudo: pergunta o modo, garante o Qdrant no ar, registra o MCP `qdrant-memory` **só nos
-agentes que o projeto usa**, cria a collection `agent_<projeto>` e valida com `qdrant-store`/`qdrant-find`.
-Ela também **troca de modo** e **remove** — foi ela que absorveu o antigo `buildison switch`.
+```text
+/qdrant
+```
+
+A skill `qdrant-setup` faz o resto: pergunta o modo, garante o Qdrant no ar, registra o MCP `qdrant-memory`
+**só nos agentes que o projeto usa**, cria a collection `agent_<projeto>` e valida com
+`qdrant-store`/`qdrant-find`. Ela também **troca de modo** e **remove**.
 
 | Modo | Endpoint | Quando |
 | :-- | :-- | :-- |
 | **local** | `http://localhost:6333` (do `~/local-infra`) | simples; a memória fica só nesta máquina |
 | **VPS** | `https://qdrant.<seu-dominio>` com `api-key` | a memória segue você entre máquinas |
 
-No modo VPS o config usa `"QDRANT_API_KEY": "${QDRANT_API_KEY}"` — a key é lida do **ambiente do
-shell**, nunca entra no arquivo versionado. Exporte antes de abrir o agente:
+No modo VPS o config guarda só `"QDRANT_API_KEY": "${QDRANT_API_KEY}"` — a key é lida do **ambiente do
+shell** e nunca entra em arquivo versionado. Exporte antes de abrir o agente.
+
+Mac / Linux:
 
 ```bash
 echo 'export QDRANT_API_KEY="sua-key-aqui"' >> ~/.zshrc && source ~/.zshrc
 ```
 
-> **Sem replicação entre local e VPS.** São instâncias independentes — memórias salvas numa não aparecem na
-> outra, e trocar de modo **não migra** o que já foi gravado. Escolha uma como fonte de verdade.
->
-> **O `~/.codex/config.toml` é global**: existe uma collection `qdrant-memory` pra máquina inteira, não uma
-> por projeto. A skill avisa antes de mexer nele.
->
-> Setup completo da VPS (Traefik + HTTPS + API key): [`docs/infra/qdrant-vps-template.md`](docs/infra/qdrant-vps-template.md).
+Windows:
 
-### Uma collection por projeto
+```powershell
+[Environment]::SetEnvironmentVariable('QDRANT_API_KEY', 'sua-key-aqui', 'User')
+```
 
-O Qdrant é uma instância só, com **uma collection por projeto** (`agent_<projeto>`). A skill deriva o nome
-do diretório; passe `--collection` ao script dela pra usar outro.
-
-> ⚠️ A API key do Qdrant dá acesso a **todas** as collections da instância — o Qdrant não isola auth por
-> collection. Para isolamento real entre projetos, use instâncias separadas.
+- **Sem replicação entre local e VPS.** São instâncias independentes: trocar de modo **não migra** o que já foi
+  gravado. Escolha uma como fonte de verdade.
+- **Uma collection por projeto** (`agent_<projeto>`), numa instância só. A API key do Qdrant dá acesso a
+  **todas** as collections — para isolamento real entre projetos, use instâncias separadas.
+- **O `~/.codex/config.toml` é global**: existe um `qdrant-memory` para a máquina inteira, não um por projeto.
+  A skill avisa antes de mexer nele.
+- Setup da VPS (Traefik + HTTPS + API key): [`docs/infra/qdrant-vps-template.md`](docs/infra/qdrant-vps-template.md).
 
 ---
 
 ## O que cada agente recebe
 
-| Agente | Glue gerado |
-|---|---|
+| Agente | Recebe |
+| :-- | :-- |
 | **Claude Code** | `.claude/` + `CLAUDE.md` (`@imports`) + `.mcp.json` |
 | **Codex** | `AGENTS.md` (nativo) + bloco MCP em `~/.codex/config.toml` |
 | **OpenCode/Hermes** | `AGENTS.md` (nativo) + `opencode.json` |
-| **Antigravity** | `AGENTS.md` (nativo) + `.agents/skills/` (skills e commands) + `.agents/agents/` + MCP no config global do Gemini |
+| **Antigravity** | `AGENTS.md` (nativo) + `.agents/skills/` + `.agents/agents/` + `.agents/mcp_config.json` |
 | _(todos)_ | `AGENTS.md` + `docs/agent/context.md` + `docs/agent/decisions.md` |
 
+**MCP de projeto nunca vai para config global de agente.** Claude usa `.mcp.json` e Antigravity usa
+`.agents/mcp_config.json`, os dois com caminhos relativos ao projeto. O Codex é a exceção, porque só tem config
+global.
+
 <details>
-<summary>Particularidades do Codex e do Antigravity</summary>
+<summary>Particularidades do Antigravity</summary>
 
-**Codex** — o `~/.codex/config.toml` é **global** e os nomes de tabela são fixos (`[mcp_servers.serena]` etc).
-Uma tabela declarada duas vezes é TOML inválido, e aí o Codex descarta a config **inteira** — inclusive
-`[windows]`, o que deixa o app em loop ou abrindo várias instâncias. Por isso os dois instaladores:
+O Antigravity (2.0, CLI `agy` e IDE) lê o `AGENTS.md` da raiz nativamente. O resto vai no `.agents/`, no
+formato da documentação oficial ([llms.txt](https://antigravity.google/llms.txt) — toda página tem versão `.md`):
 
-- mantêm **um bloco único** `# >>> buildison >>>` e removem os blocos legados por projeto;
-- **não repetem** uma tabela que você já declarou fora do bloco;
-- **não tiram** do bloco o que um install anterior pôs e o atual não pediu — um projeto `lite` não desliga a memória de outro;
-- **validam** o arquivo final (tabelas duplicadas + `tomllib` quando há Python 3.11+) e, se ele ficaria inválido, não gravam nada.
+- **Skills** em `.agents/skills/<nome>/SKILL.md` — a pasta inteira, no padrão Agent Skills, com `references/` e
+  `scripts/`. Os **commands** do buildison também entram como skill: no Antigravity toda skill vira
+  `/<nome>` sozinha (`/commit`, `/pr`, `/tlg`...).
+- **Agents** em `.agents/agents/<nome>.md` — viram subagentes, e dá para escolher um como agente principal no
+  `/agents`. O frontmatter leva só `name` e `description`: os nomes de ferramenta do Claude (`Read`, `Bash`...)
+  não existem lá, e a doc avisa que nome de ferramenta inválido trava o subagente.
+- **MCP** em `.agents/mcp_config.json`, do projeto. O global `~/.gemini/config/mcp_config.json` vale para
+  **todo** projeto aberto no Antigravity; se ele ainda tiver servidor preso a um projeto, o instalador avisa.
+- **Workflows não são mais gerados** — o Antigravity os descontinua em 1º de novembro de 2026.
 
-O preset `files` não toca no `config.toml`. `serena` e `spec-workflow` funcionam em qualquer projeto (resolvem pelo
-CWD), mas a `COLLECTION_NAME` do Qdrant no global aponta para um projeto só — o último que instalou memória.
-
-**Antigravity** (2.0, CLI `agy` e IDE) lê o `AGENTS.md` da raiz nativamente. O resto vai no `.agents/`, no
-formato da doc oficial ([llms.txt](https://antigravity.google/llms.txt) — toda página tem versão `.md`):
-
-- **Skills** em `.agents/skills/<nome>/SKILL.md` — a **pasta inteira**, no padrão Agent Skills, então
-  `references/` e `scripts/` vão junto. Os **commands** do buildison também entram como skill: no Antigravity
-  toda skill vira `/<nome>` sozinha (`/commit`, `/pr`, `/tlg`…).
-- **Agents** em `.agents/agents/<nome>.md` — viram subagentes que o agente principal delega (e dá pra
-  escolher como agente principal no `/agents`). O frontmatter leva só `name` e `description`: o `tools` fica
-  de fora de propósito, porque os nomes do Claude (`Read`, `Bash`…) não existem lá e a doc avisa que nome de
-  tool inválido **trava** o subagente.
-- **Workflows não são mais gerados** — o Antigravity os descontinua em 1º de novembro de 2026. Num `--update`,
-  o instalador remove os workflows e as skills soltas (`.agents/skills/<nome>.md`) que **ele mesmo** gerou nas
-  versões antigas; o que você escreveu à mão fica.
-
-O MCP do Antigravity vai no **`.agents/mcp_config.json` do projeto**, com caminhos relativos (igual ao
-`.mcp.json` do Claude) — **nunca** no global `~/.gemini/config/mcp_config.json`. O global vale pra todo projeto
-aberto no Antigravity: as versões antigas do instalador gravavam lá com o caminho absoluto do "último projeto
-instalado", e aí serena, spec-workflow e a memória Qdrant de **um** projeto apareciam em **todos** (memória de um
-projeto indo pra coleção de outro). Se o global ainda tiver servidor preso a um projeto, o instalador avisa —
-não apaga sozinho, porque o global é seu.
-
-Regenerar o `.agents/` a partir do `.claude/`:
+Para regenerar o `.agents/` a partir do `.claude/`:
 
 ```bash
 node scripts/gen-antigravity.mjs
 ```
 
 </details>
+
+<details>
+<summary>Particularidades do Codex</summary>
+
+O `~/.codex/config.toml` é **global** e os nomes de tabela são fixos (`[mcp_servers.serena]` etc). Uma tabela
+declarada duas vezes deixa o TOML inválido, e aí o Codex descarta a config **inteira**. Por isso os instaladores:
+
+- mantêm **um bloco único** `# >>> buildison >>>`;
+- **não repetem** uma tabela que você já declarou fora do bloco;
+- **não tiram** do bloco o que já estava lá — inclusive servidor seu que você pôs dentro dele;
+- **validam** o arquivo final e, se ele ficaria inválido, não gravam nada.
+
+O preset `files` não toca no `config.toml`. `serena` e `spec-workflow` funcionam em qualquer projeto porque
+resolvem pela pasta atual.
+
+</details>
+
+---
+
+## A infra local
+
+Um stack de desenvolvimento **global** em `~/local-infra/`: sobe uma vez e atende todos os projetos da máquina.
+Hostname: `localhost` no host, `host.docker.internal` de dentro de container.
+
+| Serviço | Porta | Para quê |
+| :-- | :-- | :-- |
+| **Postgres** | `5432` | Um database por projeto |
+| **Redis** | `6379` | Um número de DB por projeto (`/0`, `/1`...) |
+| **Qdrant** | `6333` / `6334` | Memória vetorial dos agentes (via `/qdrant`) |
+| **ngrok** | `4040` | URL pública efêmera (teste rápido) |
+| **cloudflared** | — | Tunnel nomeado, URL estável no seu domínio |
+
+Para montar, instale com `--infra` (veja [Infra local e Serena](#infra-local-e-serena)) ou peça ao agente a
+skill `local-infra`. A senha do Postgres vai para o `~/local-infra/.env` e aparece no fim da instalação.
+
+Subir (Mac / Linux):
+
+```bash
+cd ~/local-infra && docker compose up -d
+```
+
+Subir (Windows):
+
+```powershell
+cd $HOME\local-infra; docker compose up -d
+```
+
+Derrubar (Mac / Linux):
+
+```bash
+cd ~/local-infra && docker compose down
+```
+
+Derrubar (Windows):
+
+```powershell
+cd $HOME\local-infra; docker compose down
+```
+
+O `down` mantém os volumes: os dados sobrevivem.
 
 ---
 
@@ -377,7 +622,7 @@ node scripts/gen-antigravity.mjs
 ### Agents
 
 | Agent | Descrição |
-|---|---|
+| :-- | :-- |
 | `db` | Supabase + PostgreSQL + Redis: schema, migrations, RLS, repositories |
 | `api` | Camada HTTP: routes, schemas/DTOs, middlewares, error handling |
 | `logic` | Lógica de negócio: services, validações, orquestração de processos |
@@ -391,12 +636,12 @@ node scripts/gen-antigravity.mjs
 | `arq-info` | Documenta a arquitetura do **nosso** código: C4/Structurizr, ERD, ADR (read-only) |
 | `arq-info-web` | Engenharia reversa da arquitetura de informação de um app web **externo** |
 | `design-system-extractor` | Extrai um design system fiel de um site de referência |
-| `suporte` | Diagnostica o setup da toolbox: MCP falhando, troca de modo, memória |
+| `suporte` | Diagnostica o setup: MCP falhando, memória, browser travado |
 
 ### Commands
 
 | Command | Descrição |
-|---|---|
+| :-- | :-- |
 | `/commit` | Stage inteligente + commit com mensagem bem escrita |
 | `/push` | Push seguro, cria upstream se necessário |
 | `/pr` | Cria PR analisando todos os commits da branch |
@@ -409,17 +654,17 @@ node scripts/gen-antigravity.mjs
 | `/ghaction` | Cria workflows de GitHub Actions (detecta o stack) |
 | `/portainer` | Gera stack para Portainer (Docker Swarm + Traefik + redes overlay) |
 | `/mecontext` | Atualiza `docs/agent/context.md` e a memória do projeto |
-| `/qdrant` | Instala/troca/remove a memória vetorial Qdrant (skill `qdrant-setup`) |
+| `/qdrant` | Instala, troca ou remove a memória vetorial Qdrant (skill `qdrant-setup`) |
 
 ### Skills
 
 | Skill | Descrição |
-|---|---|
-| `database` | Supabase, PostgreSQL, Redis, migrations, RLS, VPS connections |
+| :-- | :-- |
+| `database` | Supabase, PostgreSQL, Redis, migrations, RLS, conexões com VPS |
 | `api` | Camada HTTP: routes, schemas, error handling (agnóstico de framework) |
 | `infra` | Docker, env vars, estrutura de projeto, ADRs |
-| `logging` | Logging estruturado em JSON, patterns de observabilidade |
-| `golang` | Go backend: handlers, services, repositories, context, testing |
+| `logging` | Logging estruturado em JSON, padrões de observabilidade |
+| `golang` | Go backend: handlers, services, repositories, context, testes |
 | `nestjs` | NestJS: módulos, controllers, services, DTOs, validação, Prisma |
 | `prisma` | Prisma ORM: schema, migrations, client, transactions, performance |
 | `postgrest` | PostgREST: APIs database-first, views, RPC, RLS, permissões |
@@ -427,34 +672,51 @@ node scripts/gen-antigravity.mjs
 | `seo-technical` | SEO técnico: sitemaps, meta tags, structured data |
 | `favicon` | Favicon e metadata para Next.js |
 | `local-infra` | Stack global Docker na máquina de dev: Postgres + Redis + Qdrant + tunnels |
-| `vps-infra` | VPS do zero: Ubuntu, Docker, Swarm, Traefik com HTTPS, Portainer opcional. **Também vive no [infrailson](https://github.com/demetrivis/infrailson) — editou aqui, sincronize lá** |
-| `qdrant-setup` | **Setup** da memória vetorial sob demanda: sobe/aponta o Qdrant, registra o MCP, cria a collection, troca de modo, remove |
+| `vps-infra` | VPS do zero: Ubuntu, Docker, Swarm, Traefik com HTTPS, Portainer opcional. Também vive no [infrailson](https://github.com/demetrivis/infrailson) — editou aqui, sincronize lá |
+| `qdrant-setup` | **Setup** da memória vetorial: sobe ou aponta o Qdrant, registra o MCP, cria a collection, troca de modo, remove |
 | `agent-memory` | **Uso** da memória vetorial: collections, payload, o que guardar e o que nunca guardar |
 | `spec-workflow` | Planejamento estruturado: requirements → design → tasks |
 | `plano-operacao` | Pipeline read-only de documentação de arquitetura (C4, ERD, ADR) |
 
-### A toolbox MCP
+### MCPs
 
-| Peça | Papel |
-|---|---|
-| **SpecWorkflow** | Planejamento: requirements → design → tasks |
-| **Serena** | Navegação semântica do codebase |
-| **Context7** | Docs atualizadas de libs/APIs |
-| **Qdrant** | Memória vetorial persistente (uma collection por projeto) — via `/qdrant` |
-| **Chrome DevTools** | Browser pro agente (`--mcp chrome-devtools`) — sempre com `--isolated` |
+| MCP | Papel | Como entra |
+| :-- | :-- | :-- |
+| **spec-workflow** | Planejamento: requirements → design → tasks | presets `lite` e `full`, ou `--mcp spec-workflow` |
+| **serena** | Navegação semântica do codebase | preset `full`, ou `--mcp serena` |
+| **chrome-devtools** | Browser pro agente, sempre com `--isolated` | `--mcp chrome-devtools` |
+| **qdrant-memory** | Memória vetorial persistente | `/qdrant`, nunca pelo instalador |
+| **Context7** | Docs atualizadas de libs e APIs | configurado no seu agente |
 
-O `chrome-devtools-mcp` sem `--isolated` usa **o mesmo perfil do Chrome** em toda sessão: com duas abertas
-ao mesmo tempo (dois Claudes, ou Claude + Antigravity), a segunda falha com _"The browser is already
-running"_. Por isso o instalador sempre grava com `--isolated` (um Chrome temporário por sessão) e, no fim de
-toda instalação, **avisa** onde encontrar um `chrome-devtools-mcp` sem isolamento — Claude (user, local e
-`.mcp.json`), Antigravity (projeto e global), Codex e OpenCode. O preço do `--isolated` é começar deslogado
-toda vez; pra site com login, `--autoConnect` usa o seu Chrome aberto.
-
-Pré-requisito do Serena, uma vez por máquina:
+O Serena precisa do CLI instalado uma vez por máquina (ou use `--serena` na instalação):
 
 ```bash
 uv tool install -p 3.13 serena-agent && serena init
 ```
+
+---
+
+## Todas as flags
+
+| Mac / Linux | Windows | O que faz |
+| :-- | :-- | :-- |
+| `--dir <pasta>` | `-Dir <pasta>` | Onde instalar (padrão: pasta atual) |
+| `--agents <lista>` | `-Agents <lista>` | `claude`, `codex`, `opencode`, `antigravity` |
+| `--preset <nome>` | `-Preset <nome>` | `files`, `lite`, `full` (padrão) ou `custom` |
+| `--mcp <lista>` | `-Mcp <lista>` | `spec-workflow`, `serena`, `chrome-devtools` ou `none` |
+| `--parts <lista>` | `-Parts <lista>` | `agents`, `commands`, `skills`, `settings` |
+| `--skills <lista>` | `-Skills <lista>` | Só estas skills |
+| `--subagents <lista>` | `-Subagents <lista>` | Só estes agents |
+| `--commands <lista>` | `-Commands <lista>` | Só estes commands |
+| `--global` | `-Global` | Instala em `~/.claude` e `~/.agents/skills`, para todos os projetos |
+| `--plugin-skills <lista>` | `-PluginSkills <lista>` | Com `--global`: leva skills de plugins do Claude para o Codex (`none` tira) |
+| `--update` | `-Update` | Atualiza o boilerplate e preserva o que é do projeto |
+| `--infra` / `--no-infra` | `-Infra` / `-NoInfra` | Monta (ou não) o `~/local-infra/` |
+| `--serena` / `--no-serena` | `-Serena` / `-NoSerena` | Instala (ou não) o CLI do Serena |
+| `--list` | `-List` | Mostra tudo o que dá para escolher e sai |
+| `--yes` | `-Yes` | Não pergunta nada |
+| `--force` | `-Force` | Regrava tudo do zero — **apaga** `context.md` e `decisions.md` |
+| `--help` | `-Help` | Ajuda |
 
 ---
 
@@ -464,7 +726,7 @@ O agente pode consultar Postgres e Redis direto. **Não vem por padrão** — ne
 
 ### Opção 1 — no config do agente
 
-Portável entre Claude, Codex e OpenCode. Em `.mcp.json` (Claude Code):
+Em `.mcp.json` (Claude Code):
 
 ```jsonc
 "redis":    { "command": "uvx", "args": ["redis-mcp-server@latest", "--url", "redis://localhost:6379/0"] },
@@ -485,12 +747,12 @@ args = ["postgres-mcp", "--access-mode=restricted"]
 env = { DATABASE_URI = "postgresql://dev:<SENHA>@localhost:5432/<DATABASE>" }
 ```
 
-Em `opencode.json` (OpenCode/Hermes): mesma ideia, dentro de `"mcp"`, com `"type": "local"` e `"command": [...]`.
+Em `opencode.json` (OpenCode/Hermes): a mesma ideia, dentro de `"mcp"`, com `"type": "local"` e
+`"command": [...]`. No Antigravity: dentro de `mcpServers` no `.agents/mcp_config.json`.
 
-> `--access-mode=restricted` = só leitura e operações seguras. Troque por `unrestricted` só se precisar escrever.
->
-> ⚠️ **A senha fica no arquivo.** Em repo público não commite a senha real — use placeholder, ou vá de Docker
-> Toolkit (abaixo), que guarda o secret no Keychain.
+`--access-mode=restricted` permite só leitura e operações seguras; troque por `unrestricted` só se precisar
+escrever. **A senha fica no arquivo**: em repo público, use placeholder ou vá de Docker MCP Toolkit (abaixo),
+que guarda o secret no Keychain.
 
 ### Opção 2 — Docker MCP Toolkit
 
@@ -500,7 +762,7 @@ Sem senha em arquivo. Primeiro, o secret:
 printf '%s' "<SENHA>" | docker mcp secret set POSTGRES_PASSWORD
 ```
 
-Depois habilite os servers Postgres/Redis no Docker Desktop → MCP Toolkit e conecte:
+Depois habilite os servers Postgres e Redis no Docker Desktop (MCP Toolkit) e conecte:
 
 ```bash
 docker mcp client connect claude-code
@@ -512,8 +774,8 @@ docker mcp client connect claude-code
 
 ```
 AGENTS.md              # PERMANENTE: regras + infra + toolbox (fonte única, todos os agentes)
-CLAUDE.md              # bridge Claude Code → @AGENTS.md + @docs/agent/context.md
-.mcp.json              # toolbox MCP (spec-workflow, serena, qdrant-memory)
+CLAUDE.md              # ponte Claude Code → @AGENTS.md + @docs/agent/context.md
+.mcp.json              # toolbox MCP deste repo
 .spec-workflow/        # templates de requirements/design/tasks
 
 .claude/               # PERMANENTE: a máquina do boilerplate
@@ -525,10 +787,10 @@ CLAUDE.md              # bridge Claude Code → @AGENTS.md + @docs/agent/context
 │                      # docker, ghaction, portainer, mecontext, qdrant
 └── skills/            # database, api, infra, logging, golang, nestjs, prisma,
                        # postgrest, cloudflare, seo-technical, favicon,
-                       # local-infra, vps-infra, qdrant-setup, agent-memory, spec-workflow,
-                       # plano-operacao
+                       # local-infra, vps-infra, qdrant-setup, agent-memory,
+                       # spec-workflow, plano-operacao
 
-.agents/               # glue p/ Antigravity (gerado de .claude/)
+.agents/               # glue do Antigravity (gerado de .claude/)
 ├── skills/            # uma pasta por skill + uma por command (vira /<nome>)
 └── agents/            # subagentes
 
@@ -539,18 +801,15 @@ docs/
 
 scripts/
 └── gen-antigravity.mjs
+
+install.sh             # instalador Mac / Linux (e Git Bash / WSL)
+install.ps1            # instalador Windows (PowerShell)
+bin/buildison.mjs      # wrapper do npx
 ```
 
-### Permanente vs dinâmico
-
-A distinção que organiza tudo:
-
-- **`AGENTS.md`** e **`.claude/`** são **permanentes** — vêm do boilerplate e não mudam por projeto. O
-  `--update` sobrescreve.
-- **`docs/agent/context.md`** e **`decisions.md`** são **dinâmicos** — o agente os mantém conforme constrói. O
-  `--update` nunca encosta.
-
-Ao herdar o template, evite editar o `AGENTS.md`: o que é específico do seu projeto vai no `context.md`.
+- **`AGENTS.md`** e **`.claude/`** são **permanentes**: vêm do boilerplate e o `--update` sobrescreve.
+- **`docs/agent/context.md`** e **`decisions.md`** são **dinâmicos**: o agente os mantém, e o `--update` nunca
+  encosta. Ao herdar o template, o que é específico do seu projeto vai no `context.md`, não no `AGENTS.md`.
 
 ---
 
@@ -559,16 +818,14 @@ Ao herdar o template, evite editar o `AGENTS.md`: o que é específico do seu pr
 As skills são templates — depois de instalar, adapte ao stack real do projeto:
 
 - `skills/infra/SKILL.md` — runtime, framework e database reais
-- `skills/api/SKILL.md` — os paths de pasta do seu projeto
+- `skills/api/SKILL.md` — os caminhos de pasta do seu projeto
 - `skills/logging/SKILL.md` — a biblioteca de logging usada
 
-**Nova skill:** crie `.claude/skills/nome/SKILL.md` com as convenções, e `references/` se precisar de detalhe.
+- **Nova skill:** `.claude/skills/<nome>/SKILL.md` com as convenções, e `references/` se precisar de detalhe.
+- **Novo agent:** `.claude/agents/<nome>.md` com responsabilidades e o que ele consulta.
+- **Novo command:** `.claude/commands/<nome>.md` com as instruções.
 
-**Novo agent:** crie `.claude/agents/nome.md` definindo responsabilidades e o que ele consulta.
-
-**Novo command:** crie `.claude/commands/nome.md` com as instruções.
-
-Depois de mexer no `.claude/`, regenere o mirror do Antigravity:
+Depois de mexer no `.claude/`, regenere o `.agents/` do Antigravity:
 
 ```bash
 node scripts/gen-antigravity.mjs
@@ -578,35 +835,61 @@ node scripts/gen-antigravity.mjs
 
 ## Quando algo quebra
 
-O agente `suporte` (`.claude/agents/suporte.md`) é especialista no setup — diagnostica `/mcp · failed`, troca de
-modo, migração de memória entre instâncias Qdrant e `QDRANT_API_KEY` não expandida. Acione em linguagem natural:
+O agent `suporte` é especialista no setup: diagnostica `/mcp · failed`, memória que não conecta,
+`QDRANT_API_KEY` que não expande e o browser que não abre na segunda sessão. Peça em linguagem natural:
 
-> *"a memória não está conectando, vê o que tá errado com o suporte"*
+```text
+a memória não está conectando, vê com o suporte o que está errado
+```
 
-Checagens rápidas:
+Checagens rápidas.
+
+A key do Qdrant está no ambiente? (Mac / Linux)
 
 ```bash
 echo $QDRANT_API_KEY
 ```
 
+A key do Qdrant está no ambiente? (Windows)
+
+```powershell
+$env:QDRANT_API_KEY
+```
+
+O Qdrant da VPS responde?
+
 ```bash
 curl -s -H "api-key: $QDRANT_API_KEY" https://qdrant.seu-dominio.com/collections
 ```
+
+O Qdrant local está de pé?
 
 ```bash
 docker ps --filter name=qdrant
 ```
 
-> **Reinicie o agente depois de mexer em qualquer config MCP** — todos leem no boot.
+O `chrome-devtools-mcp` está sem `--isolated` em algum lugar? (Mac / Linux)
+
+```bash
+grep -n "chrome-devtools-mcp" ~/.claude.json .mcp.json .agents/mcp_config.json ~/.codex/config.toml 2>/dev/null
+```
+
+Reinicie o agente depois de mexer em qualquer config MCP: todos leem no boot.
 
 ---
 
 ## Requisitos
 
-- [Claude Code CLI](https://claude.ai/code) v2.1.32+ (ou Codex / OpenCode / Antigravity)
-- `git` e `bash` (ou PowerShell no Windows)
-- `python3` 3.11+ é opcional: valida o `config.toml` do Codex a fundo e grava o MCP do Antigravity (bash)
-- Só quando instalados: `uv` para o Serena · Qdrant (Docker Desktop com o `local-infra`, ou VPS) para a memória — este via `/qdrant`, nunca pelo instalador
+- Um agente: [Claude Code](https://claude.ai/code), Codex, OpenCode ou Antigravity
+- `git` — o instalador clona o buildison numa pasta temporária
+- Mac / Linux: `bash` e `curl`. Windows: PowerShell 5 ou mais novo
+- `python3` é opcional no Mac / Linux: faz o merge do `.mcp.json` sem perder servidores seus, as checagens de
+  config e o `--plugin-skills`. Com 3.11+, também valida o `config.toml` do Codex a fundo
+- Só se for usar: `uv` para o Serena; Docker Desktop para o `local-infra`; Node (`npx`) para o spec-workflow e
+  o chrome-devtools
+
+O `install.ps1` é um espelho do `install.sh`. O caminho do bash é o mais testado — se algo falhar no
+Windows, abra uma issue com a saída do terminal.
 
 ## Licença
 
