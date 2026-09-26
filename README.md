@@ -11,7 +11,7 @@ A fonte é única: `AGENTS.md` + `.claude/` + `docs/agent/`. Cada agente recebe 
 
 - [Início rápido](#início-rápido)
 - [Como os comandos funcionam](#como-os-comandos-funcionam)
-- [Instalar num projeto](#instalar-num-projeto) — presets, agentes, sob medida, browser, infra
+- [Instalar num projeto](#instalar-num-projeto) — presets, agentes, sob medida, browser, Orca, infra
 - [Instalar no global](#instalar-no-global) — pra todos os projetos da máquina
 - [Atualizar](#atualizar)
 - [Memória vetorial (Qdrant)](#memória-vetorial-qdrant)
@@ -262,6 +262,62 @@ No fim de **toda** instalação, o instalador procura `chrome-devtools-mcp` sem 
 conhece — Claude (escopo user, local e `.mcp.json`), Antigravity (projeto e global), Codex e OpenCode — e avisa
 onde está. `--browserUrl` e `--autoConnect` contam como isolados, porque conectam num Chrome que já existe.
 O preço do `--isolated` é abrir deslogado a cada sessão; para site com login, `--autoConnect` usa o seu Chrome.
+
+### Com o contexto do Orca
+
+Para quem usa o [Orca](https://www.onorca.dev/docs), onde **cada tarefa vira uma git worktree** e vários
+agentes trabalham em paralelo. Funciona com qualquer preset — é uma camada a mais, como o spec-workflow.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,codex --orca --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,codex -Orca -Yes
+```
+
+Com spec-workflow (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset lite --agents claude,codex --orca --yes
+```
+
+Com spec-workflow (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset lite -Agents claude,codex -Orca -Yes
+```
+
+Desligar num projeto que já tem (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --update --no-orca --yes
+```
+
+Desligar num projeto que já tem (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Update -NoOrca -Yes
+```
+
+O que o `--orca` faz:
+
+- **Regras de worktree no `AGENTS.md`**: uma tarefa = uma worktree = um agente dono; worktree se cria pelo
+  Orca, não com `git worktree add`; handoff pela skill `orca-cli` e coordenação pela `orchestration`, sempre
+  carregando o guia da versão instalada (`orca skills get ...`) em vez de flags de memória.
+- **`.worktreeinclude`**: uma worktree nova é um checkout limpo, então o que está no `.gitignore` não vai
+  junto. Se o `.claude/`, o `AGENTS.md` ou outro arquivo do buildison estiver fora do git neste repo, o
+  instalador o lista no `.worktreeinclude`, que o Orca copia para cada worktree nova. Se estiver tudo
+  versionado, não há o que fazer. O resto do arquivo (o seu `.env`, por exemplo) é preservado.
+- **Skills do Orca**: `orca-cli` e `orchestration` são do Orca, que as instala e atualiza. O buildison não as
+  copia — só confere se estão instaladas e, se faltarem, mostra o comando (`orca skills install`).
+
+Sem a flag, o instalador pergunta — mas só se o `orca` estiver instalado na máquina. A escolha fica salva em
+`.buildison`, e o `--update` a mantém.
 
 ### Infra local e Serena
 
@@ -710,6 +766,7 @@ uv tool install -p 3.13 serena-agent && serena init
 | `--commands <lista>` | `-Commands <lista>` | Só estes commands |
 | `--global` | `-Global` | Instala em `~/.claude` e `~/.agents/skills`, para todos os projetos |
 | `--plugin-skills <lista>` | `-PluginSkills <lista>` | Com `--global`: leva skills de plugins do Claude para o Codex (`none` tira) |
+| `--orca` / `--no-orca` | `-Orca` / `-NoOrca` | Liga (ou desliga) o contexto do Orca: regras de worktree e `.worktreeinclude` |
 | `--update` | `-Update` | Atualiza o boilerplate e preserva o que é do projeto |
 | `--infra` / `--no-infra` | `-Infra` / `-NoInfra` | Monta (ou não) o `~/local-infra/` |
 | `--serena` / `--no-serena` | `-Serena` / `-NoSerena` | Instala (ou não) o CLI do Serena |

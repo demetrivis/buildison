@@ -62,6 +62,12 @@ lá `serena`/`spec-workflow` resolvem pelo CWD, mas a `COLLECTION_NAME` do Qdran
 **O instalador não configura Qdrant.** Memória vetorial é opt-in pela skill `qdrant-setup` (command
 `/qdrant`). O installer só emite `spec-workflow` e `serena`.
 
+**Variante Orca (`--orca`):** camada ortogonal aos presets, salva em `.buildison` (`BUILDISON_ORCA`). Liga a
+tag `orca` (bloco "Trabalhando no Orca" no `AGENTS.md`) e mantém um bloco `# >>> buildison >>>` no
+`.worktreeinclude` com os arquivos do buildison que estão **fora do git** naquele repo — worktree nova do Orca é
+checkout limpo. As skills do Orca (`orca-cli`, `orchestration`) são do Orca: só checamos, nunca copiamos.
+Doc do Orca: `https://www.onorca.dev/docs` (sem `llms.txt`; HTML).
+
 **Dois destinos:** projeto (default) ou `--global` (`~/.claude/{agents,commands,skills}` pro Claude,
 `~/.agents/skills` pro Codex). O global tem só duas versões — `--preset files` (sem spec-workflow) e
 `--preset lite` (com, via `claude mcp add -s user` + `~/.codex/config.toml`). Ele é governado por um

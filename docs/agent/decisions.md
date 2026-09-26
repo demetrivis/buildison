@@ -16,6 +16,27 @@ Formato por entrada:
 
 ---
 
+## 2026-09-26 — Variante Orca (`--orca`) como flag, não como branch nem preset
+
+**Contexto:** parte dos projetos roda no Orca (onorca.dev), IDE que dá a cada tarefa uma git worktree e roda
+vários agentes em paralelo. Pediu-se um setup "com e sem Orca", como já existe com e sem spec-workflow.
+
+**Decisão:** `--orca`/`--no-orca` (`-Orca`/`-NoOrca`), combinável com qualquer preset, salvo em `.buildison`.
+Liga o bloco `orca` do `AGENTS.md` (regras de worktree, handoff e coordenação via skills do Orca, conflito em
+`decisions.md`, browser isolado) e mantém no `.worktreeinclude` os arquivos do buildison que o `.gitignore`
+do repo deixa de fora. Sem a flag, só pergunta se o `orca` estiver instalado. As skills do Orca não são
+copiadas: o Orca as instala e atualiza (são stubs que carregam o guia da versão via `orca skills get`).
+
+**Motivo:** worktree nova é checkout limpo — num repo com `.claude/` no `.gitignore`, o agente de cada
+worktree rodaria sem a toolbox, sem erro visível. As regras ficam curtas e apontam pro guia vivo do Orca em
+vez de copiar flags que mudam de versão. Variante por **branch** foi descartada: cada correção teria de ser
+replicada em N branches, as variantes se combinam (Orca × spec-workflow × agentes × global), e o `npx
+github:` e o `curl` leem a `main`.
+
+**Impacto:** o `qdrant-mcp.py` passou a derivar a collection do checkout principal (`git rev-parse
+--git-common-dir`), não da pasta — senão cada worktree criaria a própria collection. Qdrant segue opcional
+e fora das regras do Orca.
+
 ## 2026-09-21 — `--mcp chrome-devtools`, sempre com `--isolated`, e aviso dos que não estão
 
 **Contexto:** ao subir o `chrome-devtools-mcp` num projeto, o usuário bateu no conflito de perfil: sem

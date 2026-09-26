@@ -42,7 +42,8 @@ python3 <skill>/scripts/qdrant-mcp.py --remove
 ```
 
 Flags: `--mode local|vps` · `--url` (obrigatória em vps) · `--dir` (default: PWD) ·
-`--collection` (default: `agent_<nome-do-diretório>`) · `--agents claude,codex,opencode,antigravity` ·
+`--collection` (default: `agent_<repositório>` — o nome do checkout principal, igual em todas as
+git worktrees do projeto, como as que o Orca cria por tarefa) · `--agents claude,codex,opencode,antigravity` ·
 `--remove`.
 
 ## Procedimento

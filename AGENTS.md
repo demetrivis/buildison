@@ -15,7 +15,7 @@
 
 <!-- bld:if source -->
 > **Nota da fonte (não vai para o projeto):** os blocos `<!-- bld:if X -->` … `<!-- bld:end -->` são filtrados
-> pelo instalador conforme o que foi instalado — `spec`, `serena`, `mcp` (algum MCP) e `infra`;
+> pelo instalador conforme o que foi instalado — `spec`, `serena`, `mcp` (algum MCP), `infra` e `orca`;
 > `!X` inverte. No projeto instalado sobra só o texto do que existe lá.
 <!-- bld:end -->
 
@@ -91,6 +91,27 @@ Config dos MCPs: [`.mcp.json`](.mcp.json) (Claude Code) · `~/.codex/config.toml
 <!-- bld:end -->
 - **Qdrant** — memória vetorial, **não instalada por padrão**: rode `/qdrant` (skill `qdrant-setup`) quando quiser.
 - **Context7** — docs atualizadas de libs/APIs. MCP `context7` (se estiver configurado no seu agente).
+<!-- bld:end -->
+
+<!-- bld:if orca -->
+## Trabalhando no Orca
+
+Este projeto roda no [Orca](https://www.onorca.dev/docs): **cada tarefa tem a própria git worktree** — branch,
+arquivos, terminal de agente e browser próprios —, e vários agentes trabalham ao mesmo tempo, cada um na sua.
+
+- **Uma tarefa = uma worktree = um agente dono.** Não crie worktree com `git worktree add`: use o Orca
+  (`orca worktree create`, skill `orca-cli`), senão ela fica fora do Orca.
+- **Passar o trabalho para outro agente** (handoff) é a skill `orca-cli`; **coordenar vários** (tarefas,
+  supervisão, gates) é a skill `orchestration`. Antes de usar o CLI, carregue o guia da versão instalada —
+  `orca skills get orca-cli` ou `orca skills get orchestration --full` — e não invente flag de memória.
+- **Arquivo fora do git não existe numa worktree nova.** O que precisa ir junto (`.env`, config local) entra
+  no `.worktreeinclude` da raiz, que o Orca copia para cada worktree criada. Pasta grande e reconstruível
+  (`node_modules`, `.cache`) vai em `worktree.sharedDirectories` no `orca.yaml`.
+- **`docs/agent/decisions.md` e `context.md` são editados em várias branches ao mesmo tempo.** Escreva cada
+  decisão como uma entrada autocontida; num conflito de merge, mantenha as duas entradas — nunca descarte a
+  de outro agente.
+- **Browser:** cada worktree tem o dela no Orca. Se usar o MCP `chrome-devtools`, ele precisa de
+  `--isolated`, senão dois agentes disputam o mesmo perfil do Chrome.
 <!-- bld:end -->
 
 ## Agent workflow

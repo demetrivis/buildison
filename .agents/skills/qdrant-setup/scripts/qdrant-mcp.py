@@ -12,7 +12,7 @@ foi removido quando o Qdrant saiu do instalador.
 Faz backup .bak.<epoch> de todo arquivo que altera. Só mexe em config que JÁ existe,
 exceto o .mcp.json do Claude, que é criado se faltar.
 """
-import argparse, json, os, re, sys, time
+import argparse, json, os, re, subprocess, sys, time
 
 EMBED = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -174,6 +174,24 @@ def do_codex(env, remove):
     return f"~/.codex/config.toml (backup {b})"
 
 
+def repo_name(target):
+    """Nome do REPOSITÓRIO, não da pasta. Numa git worktree (o Orca cria uma por tarefa) a pasta muda a
+    cada tarefa: derivar a collection dela daria uma collection por worktree, e a memória do projeto
+    ficaria picada entre elas. O --git-common-dir aponta pro .git do checkout principal."""
+    try:
+        r = subprocess.run(["git", "-C", target, "rev-parse", "--git-common-dir"],
+                           capture_output=True, text=True, timeout=10)
+        common = r.stdout.strip()
+        if r.returncode == 0 and common:
+            common = os.path.abspath(os.path.join(target, common))
+            if os.path.basename(common) == ".git":
+                return os.path.basename(os.path.dirname(common))
+            return re.sub(r"\.git$", "", os.path.basename(common))
+    except Exception:
+        pass
+    return os.path.basename(target)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["local", "vps"])
@@ -191,7 +209,7 @@ def main():
         die(f"diretório inválido: {target}")
 
     coll = a.collection or "agent_" + (
-        re.sub(r"[^a-z0-9_]", "", os.path.basename(target).lower().replace("-", "_").replace(" ", "_"))
+        re.sub(r"[^a-z0-9_]", "", repo_name(target).lower().replace("-", "_").replace(" ", "_"))
         or "project_main"
     )
     url = a.url or ("http://localhost:6333" if a.mode == "local" else "")

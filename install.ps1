@@ -29,7 +29,10 @@ e preserva CLAUDE.md, docs\agent\context.md e docs\agent\decisions.md. Nao use -
 
 Agentes: claude, codex, opencode, antigravity (no -Global: claude e codex)
 Flags: -Dir -Agents -Preset -Mcp -Parts -Skills -Subagents -Commands -List -Infra/-NoInfra
-       -Serena/-NoSerena -Yes -Force -Update -Global -PluginSkills
+       -Serena/-NoSerena -Yes -Force -Update -Global -PluginSkills -Orca/-NoOrca
+
+  -Orca / -NoOrca: contexto pra quem usa o Orca (onorca.dev) - regras de worktree no AGENTS.md,
+  .worktreeinclude pros arquivos do buildison fora do git e checagem das skills do Orca. Fica salvo.
 
   -Global instala agents, commands e skills pra TODOS os projetos da maquina:
     Claude Code -> ~\.claude\{agents,commands,skills}   Codex -> ~\.agents\skills
@@ -61,6 +64,8 @@ param(
   [switch]$Force,
   [switch]$Update,
   [switch]$Global,
+  [switch]$Orca,
+  [switch]$NoOrca,
   [string[]]$PluginSkills = @(),
   [switch]$Help
 )
@@ -457,6 +462,12 @@ if ($Global -and -not $PSBoundParameters.ContainsKey('PluginSkills') -and (Test-
   }
 }
 if (Test-Csv $PluginSkillsCsv 'none') { $PluginSkillsCsv = '' }
+# Orca: flag > escolha salva > pergunta (so se o Orca estiver instalado) > sem
+$useOrca = $null
+if ($Orca) { $useOrca = $true } elseif ($NoOrca) { $useOrca = $false }
+elseif (Test-Path -LiteralPath $cfgFile -PathType Leaf) {
+  foreach ($line in (Get-Content -LiteralPath $cfgFile)) { if ($line -match '^\s*BUILDISON_ORCA=(.*)$') { $useOrca = ($Matches[1].Trim() -eq '1') } }
+}
 if (-not $AgentsCsv -and -not $Yes) {
   Write-Host "Quais agentes configurar?" -ForegroundColor White
   Write-Host "  1) Claude Code`n  2) Codex`n  3) OpenCode/Hermes`n  4) Antigravity (Google)`n  5) Todos"
@@ -586,12 +597,22 @@ $doSerena = if ($Serena) { $true } elseif ($NoSerena -or $Yes -or -not $hasSeren
   (Read-Host "  [s/N]") -match '^[sSyY]'
 }
 
+# ---------- Orca: com ou sem o contexto de worktrees ----------
+if ($null -eq $useOrca) {
+  if (-not $Yes -and (Get-Command orca -ErrorAction SilentlyContinue)) {
+    Write-Host "`nVoce usa o Orca (onorca.dev)?" -ForegroundColor White
+    Write-Host "  Adiciona as regras de worktree ao AGENTS.md e o .worktreeinclude pros arquivos fora do git."
+    $useOrca = (Read-Host "  [s/N]") -match '^[sSyY]'
+  } else { $useOrca = $false }
+}
+
 # ---------- tags: o que existe neste projeto (filtra AGENTS.md, templates e itens) ----------
 $Tags = @()
 if ($hasSpec)   { $Tags += 'spec' }
 if ($hasSerena) { $Tags += 'serena' }
 if ($McpCsv)    { $Tags += 'mcp' }
 if ($Preset -eq 'full' -or $doInfra -or $Global) { $Tags += 'infra' }
+if ($useOrca)   { $Tags += 'orca' }
 
 $mcpLabel = if ($McpCsv) { $McpCsv } else { 'nenhum' }
 Info "Instalando: preset $Preset | MCP: $mcpLabel | partes: $PartsCsv"
@@ -686,6 +707,60 @@ function Set-GlobalClaudeMcp([string]$name, [bool]$wantIt, [string[]]$cmd, $old,
 # Sem --isolated, todo chrome-devtools-mcp usa o MESMO perfil do Chrome: duas sessoes ao mesmo tempo
 # (dois Claudes, Claude + Antigravity) e a segunda falha com "browser is already running".
 # --browserUrl/--wsEndpoint/--autoConnect tambem escapam: conectam num Chrome que ja existe.
+# ---------- Orca ----------
+# No Orca cada tarefa vira uma git worktree: um checkout LIMPO. O que esta no .gitignore nao vai
+# junto - se o .claude\ do projeto e ignorado, o agente da worktree nova roda sem a toolbox. O
+# .worktreeinclude da raiz lista caminhos ignorados que o Orca COPIA pra cada worktree.
+function Get-BldBlockStripped([string]$file) {
+  # conteudo sem o bloco # >>> buildison >>> e sem linhas em branco no fim
+  $out = New-Object System.Collections.Generic.List[string]
+  $skip = $false
+  foreach ($l in (Get-Content -LiteralPath $file)) {
+    if ($l -match '^# >>> buildison >>>') { $skip = $true; continue }
+    if ($l -match '^# <<< buildison <<<') { $skip = $false; continue }
+    if (-not $skip) { $out.Add($l) }
+  }
+  while ($out.Count -and -not $out[$out.Count - 1].Trim()) { $out.RemoveAt($out.Count - 1) }
+  return ,$out.ToArray()
+}
+function Set-OrcaWorktreeInclude([string]$dir) {
+  $f = Join-Path $dir '.worktreeinclude'
+  $ErrorActionPreference = 'Continue'
+  & git -C $dir rev-parse --is-inside-work-tree *> $null
+  if ($LASTEXITCODE -ne 0) { Warn "Orca: $dir nao e repositorio git - o Orca trabalha com worktrees, entao .worktreeinclude nao se aplica"; return }
+  $list = @()
+  foreach ($p in '.claude', '.agents', 'AGENTS.md', 'CLAUDE.md', 'docs/agent', '.mcp.json', 'opencode.json', '.buildison', '.spec-workflow') {
+    if (-not (Test-Path -LiteralPath (Join-Path $dir $p))) { continue }
+    & git -C $dir check-ignore -q $p *> $null
+    if ($LASTEXITCODE -eq 0) { $list += $p }
+  }
+  $rest = if (Test-Path -LiteralPath $f) { @(Get-BldBlockStripped $f) } else { @() }
+  if ($list.Count) {
+    $lines = @($rest)
+    if ($rest.Count) { $lines += '' }
+    $lines += '# >>> buildison >>>'
+    $lines += '# Fora do git neste repo: o Orca copia pra cada worktree nova, senao o agente la roda sem a toolbox.'
+    $lines += $list
+    $lines += '# <<< buildison <<<'
+    Write-Utf8 $f (($lines -join "`n") + "`n")
+    Ok "Orca: .worktreeinclude - $($list -join ' ')"
+  } else {
+    if ($rest.Count) { Write-Utf8 $f (($rest -join "`n") + "`n") } elseif (Test-Path -LiteralPath $f) { Remove-Item -Force -LiteralPath $f }
+    Ok 'Orca: a toolbox esta toda no git - toda worktree nova ja recebe (nada a por no .worktreeinclude)'
+  }
+}
+function Test-OrcaSkills {
+  # as skills do Orca sao DELE: instaladas e atualizadas pelo proprio Orca
+  $miss = @()
+  foreach ($sk in 'orca-cli', 'orchestration') {
+    if (-not (Test-Path (Join-Path $env:USERPROFILE ".claude\skills\$sk")) -and -not (Test-Path (Join-Path $env:USERPROFILE ".agents\skills\$sk"))) { $miss += $sk }
+  }
+  if (-not $miss.Count) { Ok 'Orca: skills orca-cli e orchestration instaladas'; return }
+  $flags = ($miss | ForEach-Object { "--skill $_" }) -join ' '
+  Warn "Orca: faltam skills do Orca: $($miss -join ' '). O buildison nao copia - sao do Orca, e ele as mantem atualizadas."
+  if (Get-Command orca -ErrorAction SilentlyContinue) { Warn "  Instale com: orca skills install $flags" }
+  else { Warn "  Instale com: npx skills add https://github.com/stablyai/orca $flags --global" }
+}
 function Get-DevtoolsUnisolated([string]$proj) {
   $safe = '^(--isolated|--browserUrl|--browser-url|-u|--wsEndpoint|--ws-endpoint|-w|--autoConnect|--auto-connect)(=.*)?$'
   $out = @()
@@ -829,8 +904,10 @@ function Install-Global {
     "BUILDISON_SUBAGENTS=$SubagentsCsv",
     "BUILDISON_COMMANDS=$CommandsCsv",
     "BUILDISON_AGENTS=$($roots -join ',')",
-    "BUILDISON_PLUGIN_SKILLS=$PluginSkillsCsv"
+    "BUILDISON_PLUGIN_SKILLS=$PluginSkillsCsv",
+    "BUILDISON_ORCA=$(if ($useOrca) { '1' } else { '0' })"
   ) -join "`n") + "`n")
+  if ($useOrca) { Test-OrcaSkills }
 
   if ($doInfra -or $doSerena) { Warn '-Infra/-Serena nao rodam junto com -Global no PowerShell: rode-os num install por projeto, ou use a skill local-infra.' }
   Write-Host ""
@@ -1075,9 +1152,24 @@ Write-Utf8 $projCfg ((@(
   "BUILDISON_PARTS=$PartsCsv",
   "BUILDISON_SKILLS=$SkillsCsv",
   "BUILDISON_SUBAGENTS=$SubagentsCsv",
-  "BUILDISON_COMMANDS=$CommandsCsv"
+  "BUILDISON_COMMANDS=$CommandsCsv",
+  "BUILDISON_ORCA=$(if ($useOrca) { '1' } else { '0' })"
 ) -join "`n") + "`n")
 Ok ".buildison"
+
+if ($useOrca) {
+  Info "Configurando o contexto do Orca..."
+  Set-OrcaWorktreeInclude $Target
+  Test-OrcaSkills
+} else {
+  $wti = Join-Path $Target '.worktreeinclude'
+  if ((Test-Path -LiteralPath $wti) -and (Select-String -LiteralPath $wti -Pattern '^# >>> buildison >>>' -Quiet)) {
+    # saiu do Orca: tira so o bloco que o buildison pos; o resto do arquivo e do projeto
+    $rest = @(Get-BldBlockStripped $wti)
+    if ($rest.Count) { Write-Utf8 $wti (($rest -join "`n") + "`n") } else { Remove-Item -Force -LiteralPath $wti }
+    Ok 'Orca desligado: bloco do buildison tirado do .worktreeinclude'
+  }
+}
 
 # ---------- local-infra (opt-in) ----------
 $infraPass = ""
@@ -1207,6 +1299,7 @@ if ($selCodex) {
 }
 if ($selOpencode)    { $steps.Add("OpenCode:    abra o projeto (le AGENTS.md$(if ($McpCsv) { ' + opencode.json' }))") }
 if ($selAntigravity) { $steps.Add("Antigravity: abra o projeto (le AGENTS.md + .agents\)") }
+if ($useOrca) { $steps.Add("Orca: worktree nova so leva o que esta no git ou no .worktreeinclude - ponha la o .env e afins do projeto.") }
 $steps.Add("Preencha docs\agent\context.md com o stack real do projeto.")
 Write-Host "`nProximos passos:" -ForegroundColor White
 for ($i = 0; $i -lt $steps.Count; $i++) { Write-Host ("  {0}. {1}" -f ($i + 1), $steps[$i]) }

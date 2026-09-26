@@ -36,6 +36,9 @@
 #           AGENTS.md, CLAUDE.md e docs/agent/ ficam de fora — descrevem UM projeto.
 #           Rodar de novo atualiza (relê ~/.buildison/global.env). Item que o buildison não pôs lá
 #           é seu e não é sobrescrito; item que ele pôs e saiu da seleção vai pra ~/.buildison/removidos-*.
+#   --orca / --no-orca    contexto pra quem usa o Orca (onorca.dev): regras de worktree no AGENTS.md,
+#           .worktreeinclude pros arquivos do buildison que ficam fora do git, e checagem das skills
+#           do Orca (que o próprio Orca instala — o buildison não copia). Fica salvo em .buildison.
 #   --plugin-skills <lista|none>  (só com --global) leva pro Codex as skills de plugins do Claude Code
 #           instalados NESTA máquina (ex.: eng-arq). O Codex não roda plugin; o Claude segue usando o
 #           plugin. O conteúdo vem do seu disco, nunca do repo buildison.
@@ -43,7 +46,7 @@
 # Agentes suportados: claude, codex, opencode, antigravity (no --global: claude e codex)
 # Flags: --dir <path> --agents <lista> --preset files|lite|full|custom --mcp --parts --skills
 #        --subagents --commands --list --infra/--no-infra --serena/--no-serena
-#        --yes --force --update --global --plugin-skills
+#        --yes --force --update --global --plugin-skills --orca/--no-orca
 #
 # Memória vetorial (Qdrant) NÃO é mais instalada aqui: virou a skill 'qdrant-setup'
 # (+ command /qdrant). Peça ao agente "configura a memória" depois de instalar.
@@ -230,6 +233,7 @@ ASSUME_YES=0
 FORCE=0
 UPDATE=0          # atualiza SÓ o boilerplate; preserva o que é do projeto
 GLOBAL=0          # instala em ~/.claude e ~/.agents/skills em vez de num projeto
+ORCA=""           # "" = pergunta (se o Orca estiver instalado) ou relê o salvo; 1 = com; 0 = sem
 PLUGIN_SKILLS_CSV=""; PLUGIN_SKILLS_SET=0   # --global: skills de plugins do Claude que vão pro Codex
 LIST=0
 SETUP_INFRA=""    # "" = perguntar; 1 = sim; 0 = não
@@ -269,6 +273,8 @@ while [ $# -gt 0 ]; do
     --force)        FORCE=1; shift;;
     --update)       UPDATE=1; shift;;
     --global)       GLOBAL=1; shift;;
+    --orca)         ORCA=1; shift;;
+    --no-orca)      ORCA=0; shift;;
     --plugin-skills)   PLUGIN_SKILLS_CSV="${2:-}"; PLUGIN_SKILLS_SET=1; shift 2;;
     --plugin-skills=*) PLUGIN_SKILLS_CSV="${1#*=}"; PLUGIN_SKILLS_SET=1; shift;;
     -h|--help)      sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0;;
@@ -389,6 +395,7 @@ if [ "$GLOBAL" -eq 1 ] && [ "$PLUGIN_SKILLS_SET" -eq 0 ] && [ -f "$GLOBAL_CFG" ]
   PLUGIN_SKILLS_CSV="$(sed -n 's/^BUILDISON_PLUGIN_SKILLS=//p' "$GLOBAL_CFG" | tr -d '\r')"
 fi
 case ",$PLUGIN_SKILLS_CSV," in *,none,*) PLUGIN_SKILLS_CSV="";; esac
+if [ -z "$ORCA" ] && [ -f "$CFG_FILE" ]; then ORCA="$(sed -n 's/^BUILDISON_ORCA=//p' "$CFG_FILE" | tr -d '\r')"; fi
 PLUGIN_SKILLS_CSV="$(printf '%s' "$PLUGIN_SKILLS_CSV" | tr -d ' ')"
 
 # ---------- seleção de agentes ----------
@@ -575,11 +582,26 @@ if [ -z "$SETUP_SERENA" ]; then
   fi
 fi
 
+# ---------- Orca: com ou sem o contexto de worktrees ----------
+# Só pergunta se o Orca está instalado aqui — pra quem não usa, a pergunta é ruído.
+if [ -z "$ORCA" ]; then
+  if [ "$ASSUME_YES" -eq 0 ] && [ "$HAVE_TTY" -eq 1 ] && command -v orca >/dev/null 2>&1; then
+    echo ""
+    printf "${c_bold}Você usa o Orca (onorca.dev)?${c_reset}\n"
+    printf "  Adiciona as regras de worktree ao AGENTS.md e o .worktreeinclude pros arquivos fora do git.\n"
+    r=""; printf "  [s/N]: "; prompt_read r
+    case "$r" in [sSyY]*) ORCA=1;; *) ORCA=0;; esac
+  else
+    ORCA=0
+  fi
+fi
+
 # ---------- tags: o que existe neste projeto (filtra AGENTS.md, templates e itens) ----------
 TAGS=""
 if [ "$HAS_SPEC" -eq 1 ];   then TAGS="$TAGS spec"; fi
 if [ "$HAS_SERENA" -eq 1 ]; then TAGS="$TAGS serena"; fi
 if [ -n "$MCP_CSV" ];       then TAGS="$TAGS mcp"; fi
+if [ "$ORCA" = "1" ];       then TAGS="$TAGS orca"; fi
 if [ "$PRESET" = "full" ] || [ "$SETUP_INFRA" = "1" ] || [ "$GLOBAL" -eq 1 ]; then
   TAGS="$TAGS infra"
 fi
@@ -810,6 +832,56 @@ global_put() { # origem  pasta-destino → 0 instalou · 1 pulou (item seu). Usa
   echo "$dst" >> "$new"
   return 0
 }
+# ---------- Orca ----------
+# No Orca cada tarefa vira uma git worktree: um checkout LIMPO. O que está no .gitignore não vai
+# junto — se o .claude/ do projeto é ignorado (há projetos assim), o agente da worktree nova roda sem a
+# toolbox. O .worktreeinclude da raiz lista caminhos ignorados que o Orca COPIA pra cada worktree.
+strip_bld_block() { # arquivo → conteúdo sem o bloco # >>> buildison >>> e sem linhas em branco no fim
+  awk '/^# >>> buildison >>>/{s=1;next} /^# <<< buildison <<</{s=0;next} !s{a[++n]=$0; if (NF) last=n}
+       END{for (i=1; i<=last; i++) print a[i]}' "$1"
+}
+orca_worktreeinclude() {
+  local f="$TARGET_DIR/.worktreeinclude" tmp="$WORK/worktreeinclude" p list=""
+  if ! git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    warn "Orca: $TARGET_DIR não é repositório git — o Orca trabalha com worktrees, então .worktreeinclude não se aplica"
+    return 0
+  fi
+  for p in .claude .agents AGENTS.md CLAUDE.md docs/agent .mcp.json opencode.json .buildison .spec-workflow; do
+    [ -e "$TARGET_DIR/$p" ] || continue
+    if git -C "$TARGET_DIR" check-ignore -q "$p" 2>/dev/null; then list="$list$p"$'\n'; fi
+  done
+  # regrava só o bloco do buildison; o resto do arquivo (o .env do projeto etc.) é seu
+  if [ -f "$f" ]; then
+    strip_bld_block "$f" > "$tmp"
+  else
+    : > "$tmp"
+  fi
+  if [ -n "$list" ]; then
+    {
+      cat "$tmp"
+      if [ -s "$tmp" ]; then echo ""; fi
+      echo "# >>> buildison >>>"
+      echo "# Fora do git neste repo: o Orca copia pra cada worktree nova, senão o agente lá roda sem a toolbox."
+      printf '%s' "$list"
+      echo "# <<< buildison <<<"
+    } > "$f"
+    ok "Orca: .worktreeinclude — $(printf '%s' "$list" | tr '\n' ' ')"
+  else
+    if [ -s "$tmp" ]; then cp "$tmp" "$f"; elif [ -f "$f" ]; then rm -f "$f"; fi
+    ok "Orca: a toolbox está toda no git — toda worktree nova já recebe (nada a pôr no .worktreeinclude)"
+  fi
+}
+orca_skills_check() { # as skills do Orca são DELE: instaladas e atualizadas pelo próprio Orca
+  local miss="" s cmd=""
+  for s in orca-cli orchestration; do
+    [ -e "$HOME/.claude/skills/$s" ] || [ -e "$HOME/.agents/skills/$s" ] || miss="$miss $s"
+  done
+  if [ -z "$miss" ]; then ok "Orca: skills orca-cli e orchestration instaladas"; return 0; fi
+  for s in $miss; do cmd="$cmd --skill $s"; done
+  warn "Orca: faltam skills do Orca:$miss. O buildison não copia — são do Orca, e ele as mantém atualizadas."
+  if command -v orca >/dev/null 2>&1; then warn "  Instale com: orca skills install$cmd"
+  else warn "  Instale com: npx skills add https://github.com/stablyai/orca$cmd --global"; fi
+}
 devtools_unisolated() { # [projeto] → onde o chrome-devtools-mcp roda SEM isolamento (1 por linha)
   # Sem --isolated, todo chrome-devtools-mcp usa o MESMO perfil (~/.cache/chrome-devtools-mcp/
   # chrome-profile). Duas sessões ao mesmo tempo — dois Claudes, Claude + Antigravity — e a segunda
@@ -1014,7 +1086,9 @@ BUILDISON_SUBAGENTS=$SUBAGENTS_CSV
 BUILDISON_COMMANDS=$COMMANDS_CSV
 BUILDISON_AGENTS=$agents
 BUILDISON_PLUGIN_SKILLS=$PLUGIN_SKILLS_CSV
+BUILDISON_ORCA=$ORCA
 EOFCFG
+  if [ "$ORCA" = "1" ]; then orca_skills_check; fi
 
   [ "$SETUP_INFRA" = "1" ]  && { echo ""; info "Montando local-infra..."; setup_local_infra; }
   [ "$SETUP_SERENA" = "1" ] && { echo ""; info "Configurando Serena..."; setup_serena; }
@@ -1334,8 +1408,20 @@ BUILDISON_PARTS=$PARTS_CSV
 BUILDISON_SKILLS=$SKILLS_CSV
 BUILDISON_SUBAGENTS=$SUBAGENTS_CSV
 BUILDISON_COMMANDS=$COMMANDS_CSV
+BUILDISON_ORCA=$ORCA
 EOF
 ok ".buildison"
+
+if [ "$ORCA" = "1" ]; then
+  info "Configurando o contexto do Orca..."
+  orca_worktreeinclude
+  orca_skills_check
+elif [ -f "$TARGET_DIR/.worktreeinclude" ] && grep -q '^# >>> buildison >>>' "$TARGET_DIR/.worktreeinclude"; then
+  # saiu do Orca: tira só o bloco que o buildison pôs; o resto do arquivo é do projeto
+  strip_bld_block "$TARGET_DIR/.worktreeinclude" > "$WORK/wti-off"
+  if grep -q '[^[:space:]]' "$WORK/wti-off"; then cp "$WORK/wti-off" "$TARGET_DIR/.worktreeinclude"; else rm -f "$TARGET_DIR/.worktreeinclude"; fi
+  ok "Orca desligado: bloco do buildison tirado do .worktreeinclude"
+fi
 
 # ---------- pré-requisitos da máquina (execução) ----------
 [ "$SETUP_INFRA" = "1" ]  && { echo ""; info "Montando local-infra..."; setup_local_infra; }
@@ -1375,4 +1461,7 @@ if [ "$SEL_CODEX" -eq 1 ]; then
 fi
 if [ "$SEL_OPENCODE" -eq 1 ]; then step "OpenCode:    abra o projeto (lê AGENTS.md${MCP_CSV:+ + opencode.json})"; fi
 if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then step "Antigravity: abra o projeto (lê AGENTS.md + .agents/)"; fi
+if [ "$ORCA" = "1" ]; then
+  step "Orca: worktree nova só leva o que está no git ou no .worktreeinclude — ponha lá o .env e afins do projeto."
+fi
 step "Preencha docs/agent/context.md com o stack real do projeto."
