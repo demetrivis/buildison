@@ -27,7 +27,7 @@ A escolha fica em .buildison na raiz do projeto e e reaproveitada nas proximas e
 -Update atualiza so o boilerplate (AGENTS.md, .claude\, .agents\, .spec-workflow\templates\, .mcp.json)
 e preserva CLAUDE.md, docs\agent\context.md e docs\agent\decisions.md. Nao use -Force pra atualizar.
 
-Agentes: claude, codex, opencode, antigravity (no -Global: claude e codex)
+Agentes: claude, codex, opencode, antigravity. Padrao: claude,codex,antigravity (no -Global: os mesmos, sem opencode)
 Flags: -Dir -Agents -Preset -Mcp -Parts -Skills -Subagents -Commands -List -Infra/-NoInfra
        -Serena/-NoSerena -Yes -Force -Update -Global -PluginSkills -Orca/-NoOrca
 
@@ -395,7 +395,7 @@ $globalCfg = Join-Path $globalDir 'global.env'       # a escolha do -Global (pre
 $globalMan = Join-Path $globalDir 'global.manifest'  # o que o -Global pos no disco - so isso ele mexe depois
 if ($Global) {
   if ($Dir) { Die '-Global nao combina com -Dir: ele instala em ~\.claude (e ~\.agents\skills no Codex).' }
-  Ok 'Destino: global - ~\.claude (Claude Code) | ~\.agents\skills (Codex)'
+  Ok 'Destino: global - ~\.claude (Claude Code) | ~\.agents\skills (Codex) | ~\.gemini (Antigravity)'
   $Target = $env:USERPROFILE
   $cfgFile = $globalCfg
 } else {
@@ -444,11 +444,22 @@ if ((Test-Path -LiteralPath $cfgFile -PathType Leaf) -and -not $presetSet) {
 
 # ---------- selecao de agentes ----------
 $AgentsCsv = (Split-List $Agents) -join ','
-# No global os agentes ficam salvos e valem mesmo trocando de -Preset: sem isso, "-Global -Preset
-# lite -Yes" depois de um install com codex cairia no default (so claude) e tiraria as skills do Codex.
-if ($Global -and -not $AgentsCsv -and (Test-Path -LiteralPath $globalCfg)) {
-  foreach ($line in (Get-Content -LiteralPath $globalCfg)) {
+# Os agentes ficam salvos (.buildison do projeto e global.env) e valem mesmo trocando de -Preset. Sem
+# isso, um -Update sem -Agents cairia no padrao e poria agente onde nao havia.
+if (-not $AgentsCsv -and (Test-Path -LiteralPath $cfgFile -PathType Leaf)) {
+  foreach ($line in (Get-Content -LiteralPath $cfgFile)) {
     if ($line -match '^\s*BUILDISON_AGENTS=(.*)$') { $AgentsCsv = $Matches[1].Trim() }
+  }
+  # .buildison de versao antiga nao guardava os agentes: deduz do que ja esta instalado, em vez de
+  # impor o padrao novo (o trio) num projeto que nao tinha Codex nem Antigravity.
+  if (-not $AgentsCsv -and -not $Global) {
+    $a = @()
+    if (Test-Path -LiteralPath (Join-Path $Target '.claude')) { $a += 'claude' }
+    $agd = Join-Path $Target '.agents'
+    if ((Test-Path -LiteralPath $agd) -and (Get-ChildItem -LiteralPath $agd -Recurse -File -Filter '*.md' -ErrorAction SilentlyContinue | Select-String -Pattern 'por gen-antigravity\.mjs' -Quiet)) { $a += 'antigravity' }
+    if (Test-Path -LiteralPath (Join-Path $Target 'opencode.json')) { $a += 'opencode' }
+    $AgentsCsv = $a -join ','
+    if ($AgentsCsv) { Info "Agentes deduzidos do que ja esta instalado: $AgentsCsv (passe -Agents pra mudar)" }
   }
 }
 # idem pras skills de plugin: sao escolha sua, nao da versao
@@ -471,7 +482,7 @@ elseif (Test-Path -LiteralPath $cfgFile -PathType Leaf) {
 if (-not $AgentsCsv -and -not $Yes) {
   Write-Host "Quais agentes configurar?" -ForegroundColor White
   Write-Host "  1) Claude Code`n  2) Codex`n  3) OpenCode/Hermes`n  4) Antigravity (Google)`n  5) Todos"
-  $sel = Read-Host "Escolha (ex: 1,2 ou 5)"
+  $sel = Read-Host "Escolha [enter = 1,2,4 - Claude Code, Codex e Antigravity]"
   if ($sel -match '5') { $AgentsCsv = 'claude,codex,opencode,antigravity' }
   else {
     $a = @()
@@ -482,17 +493,19 @@ if (-not $AgentsCsv -and -not $Yes) {
     $AgentsCsv = ($a -join ',')
   }
 }
-if (-not $AgentsCsv) { $AgentsCsv = 'claude' }
+# padrao: o trio Claude Code + Codex + Antigravity
+if (-not $AgentsCsv) { $AgentsCsv = 'claude,codex,antigravity' }
 $selClaude      = Test-Csv $AgentsCsv 'claude'
 $selCodex       = Test-Csv $AgentsCsv 'codex'
 $selOpencode    = Test-Csv $AgentsCsv 'opencode'
 $selAntigravity = Test-Csv $AgentsCsv 'antigravity'
 if ($Global) {
-  if ($selOpencode)    { Warn '-Global: OpenCode ainda nao tem instalacao global - ignorado' }
-  if ($selAntigravity) { Warn '-Global: Antigravity ainda nao tem instalacao global - ignorado' }
-  $selOpencode = $false; $selAntigravity = $false
-  if (-not $selClaude -and -not $selCodex) { Die '-Global funciona com -Agents claude e/ou codex.' }
+  if ($selOpencode) { Warn '-Global: OpenCode ainda nao tem instalacao global - ignorado' }
+  $selOpencode = $false
+  if (-not $selClaude -and -not $selCodex -and -not $selAntigravity) { Die '-Global funciona com -Agents claude, codex e/ou antigravity.' }
 }
+# o que fica salvo (projeto e global): a escolha, nao o que acabou pulado por outro motivo
+$agentsSaved = (@(@('claude', $selClaude), @('codex', $selCodex), @('opencode', $selOpencode), @('antigravity', $selAntigravity)) | Where-Object { $_[1] } | ForEach-Object { $_[0] }) -join ','
 
 # ---------- preset ----------
 # No -Global so existem duas versoes: sem e com spec-workflow. Serena, settings.json, CLAUDE.md e
@@ -815,11 +828,12 @@ function Install-Global {
   New-Dir $globalDir
   $old = if (Test-Path -LiteralPath $globalMan) { @(Get-Content -LiteralPath $globalMan) } else { @() }
   $new = New-Object System.Collections.Generic.List[string]
-  $roots = @(); if ($selClaude) { $roots += 'claude' }; if ($selCodex) { $roots += 'codex' }
+  $roots = @(); if ($selClaude) { $roots += 'claude' }; if ($selCodex) { $roots += 'codex' }; if ($selAntigravity) { $roots += 'antigravity' }
   if ($hasSpec) { Info 'Instalando no global - versao COM spec-workflow' } else { Info 'Instalando no global - versao SEM spec-workflow' }
 
   # Claude Code le agents/commands/skills de ~\.claude; o Codex so tem skills, em ~\.agents\skills
   foreach ($root in $roots) {
+    if ($root -eq 'antigravity') { continue }   # logo abaixo, a partir do .agents\ da fonte
     foreach ($part in 'agents', 'commands', 'skills') {
       if ($root -eq 'codex' -and $part -ne 'skills') { continue }
       $base = if ($root -eq 'claude') { Join-Path $env:USERPROFILE ".claude\$part" } else { Join-Path $env:USERPROFILE '.agents\skills' }
@@ -832,6 +846,37 @@ function Install-Global {
       }
       if ($n) { Ok "$base\ ($n)" }
     }
+  }
+
+  # ---- Antigravity: skills em pasta (commands ja convertidos em skill) e agents, do .agents\ da fonte ----
+  # O 2.0 e a IDE leem ~\.gemini\config\{skills,agents}; o CLI (agy) le skills de ~\.gemini\antigravity-cli.
+  # MCP nao vai pro global do Antigravity: valeria em todo projeto (ver .agents\mcp_config.json).
+  if ($selAntigravity) {
+    $gem = Join-Path $env:USERPROFILE '.gemini'
+    $skBases = @(Join-Path $gem 'config\skills')
+    if (Test-Path -LiteralPath (Join-Path $gem 'antigravity-cli')) { $skBases += (Join-Path $gem 'antigravity-cli\skills') }
+    $agSk = Join-Path $src '.agents\skills'
+    if (Test-Path $agSk) {
+      foreach ($base in $skBases) {
+        $n = 0
+        foreach ($item in (Get-ChildItem -LiteralPath $agSk -Directory)) {
+          $part = if (Test-Path (Join-Path $src ".claude\commands\$($item.Name).md")) { 'commands' } else { 'skills' }
+          if (-not (Test-ItemSelected $part $item.Name)) { continue }
+          if (Add-GlobalItem $item $base $old $new) { $n++ }
+        }
+        if ($n) { Ok "$base\ ($n)" }
+      }
+    }
+    $agAg = Join-Path $src '.agents\agents'
+    if (Test-Path $agAg) {
+      $n = 0
+      foreach ($item in (Get-ChildItem -LiteralPath $agAg -File -Filter '*.md')) {
+        if (-not (Test-ItemSelected 'agents' ($item.Name -replace '\.md$', ''))) { continue }
+        if (Add-GlobalItem $item (Join-Path $gem 'config\agents') $old $new) { $n++ }
+      }
+      if ($n) { Ok "$(Join-Path $gem 'config\agents')\ ($n)" }
+    }
+    if ($McpCsv) { Info "Antigravity: o MCP ($McpCsv) nao vai pro global dele - valeria em todo projeto. Instale no projeto pra ter .agents\mcp_config.json." }
   }
 
   # ---- skills de plugins do Claude -> Codex (-PluginSkills) ----
@@ -903,7 +948,7 @@ function Install-Global {
     "BUILDISON_SKILLS=$SkillsCsv",
     "BUILDISON_SUBAGENTS=$SubagentsCsv",
     "BUILDISON_COMMANDS=$CommandsCsv",
-    "BUILDISON_AGENTS=$($roots -join ',')",
+    "BUILDISON_AGENTS=$agentsSaved",
     "BUILDISON_PLUGIN_SKILLS=$PluginSkillsCsv",
     "BUILDISON_ORCA=$(if ($useOrca) { '1' } else { '0' })"
   ) -join "`n") + "`n")
@@ -1080,6 +1125,13 @@ if ($selOpencode) {
 }
 
 # ---------- Antigravity (Google) - AGENTS.md nativo + .agents/ + MCP por projeto ----------
+# Projeto que gera o proprio .agents\ (ex.: vibedesign, com `pnpm sync:agents` e um CI que confere a
+# sincronia) marca a pasta com GERADO.md. Escrever por cima quebraria esse check.
+$geradoMd = Join-Path $Target '.agents\GERADO.md'
+if ($selAntigravity -and (Test-Path -LiteralPath $geradoMd) -and -not (Select-String -LiteralPath $geradoMd -Pattern 'gen-antigravity' -Quiet)) {
+  Warn 'Antigravity: o .agents\ deste projeto e gerado por um script dele (.agents\GERADO.md) - nao mexo; rode o gerador do projeto.'
+  $selAntigravity = $false
+}
 if ($selAntigravity) {
   Info "Configurando Antigravity..."
   $agentsSrc = Join-Path $src '.agents'
@@ -1153,6 +1205,7 @@ Write-Utf8 $projCfg ((@(
   "BUILDISON_SKILLS=$SkillsCsv",
   "BUILDISON_SUBAGENTS=$SubagentsCsv",
   "BUILDISON_COMMANDS=$CommandsCsv",
+  "BUILDISON_AGENTS=$agentsSaved",
   "BUILDISON_ORCA=$(if ($useOrca) { '1' } else { '0' })"
 ) -join "`n") + "`n")
 Ok ".buildison"

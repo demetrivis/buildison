@@ -68,8 +68,14 @@ tag `orca` (bloco "Trabalhando no Orca" no `AGENTS.md`) e mantém um bloco `# >>
 checkout limpo. As skills do Orca (`orca-cli`, `orchestration`) são do Orca: só checamos, nunca copiamos.
 Doc do Orca: `https://www.onorca.dev/docs` (sem `llms.txt`; HTML).
 
+**Agentes padrão: o trio Claude Code + Codex + Antigravity.** A escolha fica salva (`BUILDISON_AGENTS` no
+`.buildison` e no `global.env`); `.buildison` antigo sem a chave → o instalador deduz do que já está instalado
+em vez de impor o trio. `.agents/GERADO.md` de gerador alheio → o Antigravity é pulado naquele projeto.
+**README entra em toda mudança** de comportamento do instalador — é pedido fixo do usuário.
+
 **Dois destinos:** projeto (default) ou `--global` (`~/.claude/{agents,commands,skills}` pro Claude,
-`~/.agents/skills` pro Codex). O global tem só duas versões — `--preset files` (sem spec-workflow) e
+`~/.agents/skills` pro Codex, `~/.gemini/config/{skills,agents}` + `~/.gemini/antigravity-cli/skills` pro
+Antigravity — sem MCP no global dele). O global tem só duas versões — `--preset files` (sem spec-workflow) e
 `--preset lite` (com, via `claude mcp add -s user` + `~/.codex/config.toml`). Ele é governado por um
 **manifest** (`~/.buildison/global.manifest`): só o que está listado ali é sobrescrito ou retirado; o
 resto em `~/.claude` é do usuário. Por isso **caminho de skill em agent/skill nunca é só

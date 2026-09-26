@@ -16,6 +16,22 @@ Formato por entrada:
 
 ---
 
+## 2026-09-26 — O trio Claude Code + Codex + Antigravity vira o padrão
+
+**Contexto:** o usuário opera com essas três IAs e pediu que elas sejam sempre o padrão — os exemplos do README
+com só `claude,codex` deixavam o Antigravity de fora. O padrão antigo (sem `--agents` → só Claude) e a falta de
+instalação global do Antigravity iam contra isso.
+
+**Decisão:** sem `--agents`, o instalador usa `claude,codex,antigravity`, no projeto e no `--global`. O global
+ganhou o Antigravity: skills (pastas, commands incluídos) em `~/.gemini/config/skills` e, se o `agy` existir,
+`~/.gemini/antigravity-cli/skills`; agents em `~/.gemini/config/agents`. O MCP continua fora do global dele.
+
+**Motivo e salvaguardas:** mudar o padrão não pode mexer em projeto já instalado. Por isso (1) os agentes
+passaram a ser salvos no `.buildison` e relidos no `--update`; (2) `.buildison` antigo, sem a chave, deduz os
+agentes do que existe (`.claude/`, `.agents/` com a marca do gerador, `opencode.json`) — o Codex não deixa
+rastro no projeto, então não é deduzido; (3) um `.agents/GERADO.md` de outro gerador (vibedesign) faz o
+instalador pular o Antigravity, senão o check de sincronia do CI daquele projeto quebraria.
+
 ## 2026-09-26 — Variante Orca (`--orca`) como flag, não como branch nem preset
 
 **Contexto:** parte dos projetos roda no Orca (onorca.dev), IDE que dá a cada tarefa uma git worktree e roda

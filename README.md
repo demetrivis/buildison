@@ -51,7 +51,7 @@ temporária e a apaga no fim.
 ## Como os comandos funcionam
 
 Todo exemplo deste README é **o comando base + flags**. Sem flags, o instalador pergunta; com `--yes`
-(`-Yes` no Windows), ele não pergunta nada.
+(`-Yes` no Windows), ele não pergunta nada. Os agentes padrão são **Claude Code, Codex e Antigravity**.
 
 | Onde | Comando base |
 | :-- | :-- |
@@ -70,25 +70,25 @@ Outras formas de rodar o mesmo instalador:
 Via npx, direto do GitHub (sempre a `main`):
 
 ```bash
-npx github:demetrivis/buildison install --dir . --agents claude --yes
+npx github:demetrivis/buildison install --dir . --agents claude,codex,antigravity --yes
 ```
 
 Via npm (versão publicada — pode estar atrás da `main`):
 
 ```bash
-npx buildison@latest install --dir . --agents claude --yes
+npx buildison@latest install --dir . --agents claude,codex,antigravity --yes
 ```
 
 Com o repo clonado (Mac / Linux):
 
 ```bash
-bash buildison/install.sh --dir /caminho/do/projeto --agents claude --yes
+bash buildison/install.sh --dir /caminho/do/projeto --agents claude,codex,antigravity --yes
 ```
 
 Com o repo clonado (Windows):
 
 ```powershell
-.\buildison\install.ps1 -Dir C:\caminho\do\projeto -Agents claude -Yes
+.\buildison\install.ps1 -Dir C:\caminho\do\projeto -Agents claude,codex,antigravity -Yes
 ```
 
 ---
@@ -104,13 +104,13 @@ Agents, commands, skills, MCP `spec-workflow` + `serena` e `.claude/settings.jso
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude,codex,antigravity --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude,codex,antigravity -Yes
 ```
 
 ### Só os arquivos (preset `files`)
@@ -120,13 +120,13 @@ Agents, commands, skills, `AGENTS.md`, `CLAUDE.md` e `docs/agent/`. Sem MCP e se
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,codex,antigravity --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,codex -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,codex,antigravity -Yes
 ```
 
 ### Arquivos + spec-workflow (preset `lite`)
@@ -137,13 +137,13 @@ O `files` mais o MCP `spec-workflow` (planejamento requirements → design → t
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset lite --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset lite --agents claude,codex,antigravity --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset lite -Agents claude,codex -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset lite -Agents claude,codex,antigravity -Yes
 ```
 
 | Preset | O que vem | Precisa na máquina |
@@ -155,45 +155,62 @@ Windows:
 
 ### Escolher os agentes
 
-`--agents` aceita qualquer combinação de `claude`, `codex`, `opencode` e `antigravity`. Sem a flag e com
-`--yes`, instala só para o Claude Code.
+O padrão é o trio **Claude Code, Codex e Antigravity** — é o que o instalador usa quando você não passa
+`--agents`, e é o que aparece em todos os exemplos deste README. `--agents` aceita qualquer combinação de
+`claude`, `codex`, `opencode` e `antigravity`.
 
-Claude Code + Antigravity, as duas IAs no mesmo projeto (Mac / Linux):
+O trio (Mac / Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,antigravity --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,codex,antigravity --yes
 ```
 
-Claude Code + Antigravity (Windows):
+O trio (Windows):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,antigravity -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,codex,antigravity -Yes
 ```
 
-Os quatro agentes (Mac / Linux):
+Só o Claude Code (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude --yes
+```
+
+Só o Claude Code (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude -Yes
+```
+
+Os quatro, com o OpenCode (Mac / Linux):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude,codex,opencode,antigravity --yes
 ```
 
-Os quatro agentes (Windows):
+Os quatro, com o OpenCode (Windows):
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude,codex,opencode,antigravity -Yes
 ```
+
+A escolha fica salva em `.buildison`: o `--update` reinstala para os mesmos agentes, sem precisar repetir
+`--agents`. Em projetos instalados antes de os agentes serem salvos, ele deduz o que já estava lá
+(`.claude/`, `.agents/`, `opencode.json`) em vez de impor o trio.
 
 ### Em outra pasta
 
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --dir ~/code/meu-projeto --preset files --agents claude --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --dir ~/code/meu-projeto --preset files --agents claude,codex,antigravity --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Dir C:\code\meu-projeto -Preset files -Agents claude -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Dir C:\code\meu-projeto -Preset files -Agents claude,codex,antigravity -Yes
 ```
 
 ### Sob medida
@@ -211,13 +228,13 @@ As flags partem do preset e trocam só o que você passar:
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude,codex --mcp spec-workflow --skills golang,nestjs,database --commands commit,pr --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude,codex,antigravity --mcp spec-workflow --skills golang,nestjs,database --commands commit,pr --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude,codex -Mcp spec-workflow -Skills golang,nestjs,database -Commands commit,pr -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude,codex,antigravity -Mcp spec-workflow -Skills golang,nestjs,database -Commands commit,pr -Yes
 ```
 
 O que depende de uma peça sai sozinho quando ela não é instalada: a skill `spec-workflow` só vem com o MCP
@@ -237,25 +254,25 @@ Claudes, ou Claude + Antigravity) a segunda falha com _"The browser is already r
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --mcp chrome-devtools --agents claude,antigravity --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --mcp chrome-devtools --agents claude,codex,antigravity --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Mcp chrome-devtools -Agents claude,antigravity -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Mcp chrome-devtools -Agents claude,codex,antigravity -Yes
 ```
 
 Junto com o spec-workflow (Mac / Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --mcp spec-workflow,chrome-devtools --agents claude,antigravity --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --mcp spec-workflow,chrome-devtools --agents claude,codex,antigravity --yes
 ```
 
 Junto com o spec-workflow (Windows):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Mcp spec-workflow,chrome-devtools -Agents claude,antigravity -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Mcp spec-workflow,chrome-devtools -Agents claude,codex,antigravity -Yes
 ```
 
 No fim de **toda** instalação, o instalador procura `chrome-devtools-mcp` sem isolamento nos configs que
@@ -271,25 +288,25 @@ agentes trabalham em paralelo. Funciona com qualquer preset — é uma camada a 
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,codex --orca --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset files --agents claude,codex,antigravity --orca --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,codex -Orca -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset files -Agents claude,codex,antigravity -Orca -Yes
 ```
 
 Com spec-workflow (Mac / Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset lite --agents claude,codex --orca --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset lite --agents claude,codex,antigravity --orca --yes
 ```
 
 Com spec-workflow (Windows):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset lite -Agents claude,codex -Orca -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset lite -Agents claude,codex,antigravity -Orca -Yes
 ```
 
 Desligar num projeto que já tem (Mac / Linux):
@@ -327,13 +344,13 @@ na hora). `--serena` instala o CLI do Serena via `uv`.
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude --infra --serena --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --agents claude,codex,antigravity --infra --serena --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude -Infra -Serena -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Agents claude,codex,antigravity -Infra -Serena -Yes
 ```
 
 ### Ver tudo o que dá pra escolher
@@ -363,6 +380,7 @@ sem nada dentro do projeto.
 | :-- | :-- |
 | Claude Code | `~/.claude/agents`, `~/.claude/commands`, `~/.claude/skills` |
 | Codex | `~/.agents/skills` (o Codex não tem agents nem commands em arquivo) |
+| Antigravity | `~/.gemini/config/skills` e `~/.gemini/config/agents` (e `~/.gemini/antigravity-cli/skills`, se o CLI `agy` estiver instalado) |
 
 São duas versões: **sem** spec-workflow (`--preset files`, o padrão) e **com** (`--preset lite`).
 
@@ -371,29 +389,31 @@ São duas versões: **sem** spec-workflow (`--preset files`, o padrão) e **com*
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --agents claude,codex,antigravity --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Agents claude,codex -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Agents claude,codex,antigravity -Yes
 ```
 
 ### Com spec-workflow
 
-Registra o MCP no escopo user do Claude Code (`claude mcp add -s user`) e no `~/.codex/config.toml`.
+Registra o MCP no escopo user do Claude Code (`claude mcp add -s user`) e no `~/.codex/config.toml`. No
+Antigravity o MCP **não** vai para o global — lá ele valeria em todo projeto aberto; para ter o spec-workflow
+no Antigravity, instale no projeto (vai para `.agents/mcp_config.json`).
 
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --preset lite --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --preset lite --agents claude,codex,antigravity --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Preset lite -Agents claude,codex -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Preset lite -Agents claude,codex,antigravity -Yes
 ```
 
 ### Com o browser (chrome-devtools)
@@ -403,13 +423,13 @@ O `chrome-devtools` não depende de projeto, então funciona bem no global — t
 Mac / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --mcp chrome-devtools --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --mcp chrome-devtools --agents claude,codex,antigravity --yes
 ```
 
 Windows:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Mcp chrome-devtools -Agents claude,codex -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Mcp chrome-devtools -Agents claude,codex,antigravity -Yes
 ```
 
 ### Com skills de plugin do Claude no Codex
@@ -421,25 +441,25 @@ sua máquina** para lá. O repo do buildison não carrega nada de terceiro.
 Exemplo com o plugin `eng-arq`, sem spec-workflow (Mac / Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --plugin-skills eng-arq --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --plugin-skills eng-arq --agents claude,codex,antigravity --yes
 ```
 
 Sem spec-workflow (Windows):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -PluginSkills eng-arq -Agents claude,codex -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -PluginSkills eng-arq -Agents claude,codex,antigravity -Yes
 ```
 
 Com spec-workflow (Mac / Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --preset lite --plugin-skills eng-arq --agents claude,codex --yes
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --global --preset lite --plugin-skills eng-arq --agents claude,codex,antigravity --yes
 ```
 
 Com spec-workflow (Windows):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Preset lite -PluginSkills eng-arq -Agents claude,codex -Yes
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Global -Preset lite -PluginSkills eng-arq -Agents claude,codex,antigravity -Yes
 ```
 
 Tirar as skills de plugin (Mac / Linux):
@@ -471,7 +491,7 @@ Tirar as skills de plugin (Windows):
 - No Codex, a versão sem **não** tira o spec-workflow do `~/.codex/config.toml`: esse arquivo é compartilhado
   com os installs por projeto.
 - Ficam de fora do global, por serem de um projeto só: `AGENTS.md`, `CLAUDE.md`, `docs/agent/`, o
-  `settings.json` e o Serena. OpenCode e Antigravity ainda não têm instalação global.
+  `settings.json` e o Serena. O OpenCode ainda não tem instalação global.
 
 > **Global ou por projeto, não os dois.** Com os dois, os mesmos agents e skills aparecem duplicados. O
 > install por projeto avisa quando detecta o global.
@@ -602,6 +622,8 @@ formato da documentação oficial ([llms.txt](https://antigravity.google/llms.tx
 - **MCP** em `.agents/mcp_config.json`, do projeto. O global `~/.gemini/config/mcp_config.json` vale para
   **todo** projeto aberto no Antigravity; se ele ainda tiver servidor preso a um projeto, o instalador avisa.
 - **Workflows não são mais gerados** — o Antigravity os descontinua em 1º de novembro de 2026.
+- **Projeto que gera o próprio `.agents/`** (marcado com `.agents/GERADO.md`, como um `pnpm sync:agents` com
+  check no CI) não é tocado: o instalador avisa e deixa o gerador do projeto cuidar dele.
 
 Para regenerar o `.agents/` a partir do `.claude/`:
 
@@ -757,7 +779,7 @@ uv tool install -p 3.13 serena-agent && serena init
 | Mac / Linux | Windows | O que faz |
 | :-- | :-- | :-- |
 | `--dir <pasta>` | `-Dir <pasta>` | Onde instalar (padrão: pasta atual) |
-| `--agents <lista>` | `-Agents <lista>` | `claude`, `codex`, `opencode`, `antigravity` |
+| `--agents <lista>` | `-Agents <lista>` | `claude`, `codex`, `opencode`, `antigravity` (padrão: `claude,codex,antigravity`) |
 | `--preset <nome>` | `-Preset <nome>` | `files`, `lite`, `full` (padrão) ou `custom` |
 | `--mcp <lista>` | `-Mcp <lista>` | `spec-workflow`, `serena`, `chrome-devtools` ou `none` |
 | `--parts <lista>` | `-Parts <lista>` | `agents`, `commands`, `skills`, `settings` |

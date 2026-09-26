@@ -31,6 +31,7 @@
 #
 # --global  instala agents, commands e skills pra TODOS os projetos da máquina, em vez de um:
 #             Claude Code → ~/.claude/{agents,commands,skills}   Codex → ~/.agents/skills
+#             Antigravity → ~/.gemini/config/{skills,agents} (+ ~/.gemini/antigravity-cli/skills, se o agy existir)
 #           Duas versões: --preset files (sem spec-workflow, default) ou --preset lite (com: skill
 #           + MCP spec-workflow no escopo user do Claude e no ~/.codex/config.toml).
 #           AGENTS.md, CLAUDE.md e docs/agent/ ficam de fora — descrevem UM projeto.
@@ -43,7 +44,8 @@
 #           instalados NESTA máquina (ex.: eng-arq). O Codex não roda plugin; o Claude segue usando o
 #           plugin. O conteúdo vem do seu disco, nunca do repo buildison.
 #
-# Agentes suportados: claude, codex, opencode, antigravity (no --global: claude e codex)
+# Agentes suportados: claude, codex, opencode, antigravity. Padrão: claude,codex,antigravity
+# (no --global: claude, codex e antigravity)
 # Flags: --dir <path> --agents <lista> --preset files|lite|full|custom --mcp --parts --skills
 #        --subagents --commands --list --infra/--no-infra --serena/--no-serena
 #        --yes --force --update --global --plugin-skills --orca/--no-orca
@@ -349,7 +351,7 @@ GLOBAL_CFG="$GLOBAL_DIR/global.env"       # a escolha do --global (preset, filtr
 GLOBAL_MAN="$GLOBAL_DIR/global.manifest"  # o que o --global pôs no disco — só isso ele mexe depois
 if [ "$GLOBAL" -eq 1 ]; then
   [ -n "$TARGET_DIR" ] && die "--global não combina com --dir: ele instala em ~/.claude (e ~/.agents/skills no Codex)."
-  ok "Destino: global — ~/.claude (Claude Code) · ~/.agents/skills (Codex)"
+  ok "Destino: global — ~/.claude (Claude Code) · ~/.agents/skills (Codex) · ~/.gemini (Antigravity)"
   CFG_FILE="$GLOBAL_CFG"
 else
   if [ -z "$TARGET_DIR" ]; then
@@ -381,11 +383,19 @@ if [ -f "$CFG_FILE" ] && [ "$PRESET_SET" -eq 0 ]; then
   done < "$CFG_FILE"
   info "Usando a escolha salva em ${CFG_FILE/#$HOME/~} (preset ${PRESET:-custom}) — passe --preset pra mudar"
 fi
-# No global os agentes também ficam salvos, e valem mesmo quando você troca de --preset: sem isso,
-# "--global --preset lite --yes" depois de um install com codex cairia no default (só claude) e
-# tiraria as skills do Codex.
-if [ "$GLOBAL" -eq 1 ] && [ -z "$AGENTS_CSV" ] && [ -f "$GLOBAL_CFG" ]; then
-  AGENTS_CSV="$(sed -n 's/^BUILDISON_AGENTS=//p' "$GLOBAL_CFG" | tr -d '\r')"
+# Os agentes ficam salvos (no .buildison do projeto e no global.env) e valem mesmo quando você troca
+# de --preset. Sem isso, um --update sem --agents cairia no padrão e poria agente onde não havia — ou,
+# no global, tiraria as skills de um agente que estava lá.
+if [ -z "$AGENTS_CSV" ] && [ -f "$CFG_FILE" ]; then
+  AGENTS_CSV="$(sed -n 's/^BUILDISON_AGENTS=//p' "$CFG_FILE" | tr -d '\r')"
+  # .buildison de versão antiga não guardava os agentes: deduz do que já está instalado, em vez de
+  # impor o padrão novo (o trio) num projeto que não tinha Codex nem Antigravity.
+  if [ -z "$AGENTS_CSV" ] && [ "$GLOBAL" -eq 0 ]; then
+    if [ -d "$TARGET_DIR/.claude" ]; then AGENTS_CSV="claude"; fi
+    if grep -rqs "por gen-antigravity.mjs" "$TARGET_DIR/.agents"; then AGENTS_CSV="${AGENTS_CSV:+$AGENTS_CSV,}antigravity"; fi
+    if [ -f "$TARGET_DIR/opencode.json" ]; then AGENTS_CSV="${AGENTS_CSV:+$AGENTS_CSV,}opencode"; fi
+    if [ -n "$AGENTS_CSV" ]; then info "Agentes deduzidos do que já está instalado: $AGENTS_CSV (passe --agents pra mudar)"; fi
+  fi
 fi
 # idem pras skills de plugin: são escolha sua, não da versão
 if [ "$PLUGIN_SKILLS_SET" -eq 1 ] && [ "$GLOBAL" -eq 0 ]; then
@@ -404,7 +414,7 @@ if [ -z "$AGENTS_CSV" ] && [ "$ASSUME_YES" -eq 0 ]; then
   echo ""
   printf "${c_bold}Quais agentes configurar?${c_reset}\n"
   printf "  1) Claude Code\n  2) Codex\n  3) OpenCode/Hermes\n  4) Antigravity (Google)\n  5) Todos\n"
-  sel=""; printf "Escolha (ex: 1,2 ou 5): "; prompt_read sel
+  sel=""; printf "Escolha [enter = 1,2,4 — Claude Code, Codex e Antigravity]: "; prompt_read sel
   case ",${sel}," in *5*) AGENTS_CSV="claude,codex,opencode,antigravity";; esac
   [ -z "$AGENTS_CSV" ] && {
     case ",${sel}," in *,1,*) AGENTS_CSV="${AGENTS_CSV}claude,";; esac
@@ -413,17 +423,24 @@ if [ -z "$AGENTS_CSV" ] && [ "$ASSUME_YES" -eq 0 ]; then
     case ",${sel}," in *,4,*) AGENTS_CSV="${AGENTS_CSV}antigravity,";; esac
   }
 fi
-[ -z "$AGENTS_CSV" ] && AGENTS_CSV="claude"
+# padrão: o trio Claude Code + Codex + Antigravity
+[ -z "$AGENTS_CSV" ] && AGENTS_CSV="claude,codex,antigravity"
 case ",$AGENTS_CSV," in *,claude,*|*claude*) SEL_CLAUDE=1;; esac
 case ",$AGENTS_CSV," in *codex*) SEL_CODEX=1;; esac
 case ",$AGENTS_CSV," in *opencode*) SEL_OPENCODE=1;; esac
 case ",$AGENTS_CSV," in *antigravity*) SEL_ANTIGRAVITY=1;; esac
 if [ "$GLOBAL" -eq 1 ]; then
-  [ "$SEL_OPENCODE" -eq 1 ]    && warn "--global: OpenCode ainda não tem instalação global — ignorado"
-  [ "$SEL_ANTIGRAVITY" -eq 1 ] && warn "--global: Antigravity ainda não tem instalação global — ignorado"
-  SEL_OPENCODE=0; SEL_ANTIGRAVITY=0
-  [ "$SEL_CLAUDE" -eq 0 ] && [ "$SEL_CODEX" -eq 0 ] && die "--global funciona com --agents claude e/ou codex."
+  [ "$SEL_OPENCODE" -eq 1 ] && warn "--global: OpenCode ainda não tem instalação global — ignorado"
+  SEL_OPENCODE=0
+  [ "$SEL_CLAUDE" -eq 0 ] && [ "$SEL_CODEX" -eq 0 ] && [ "$SEL_ANTIGRAVITY" -eq 0 ] && \
+    die "--global funciona com --agents claude, codex e/ou antigravity."
 fi
+# o que fica salvo (projeto e global): a escolha, não o que acabou pulado por outro motivo
+AGENTS_SAVED=""
+for a in claude codex opencode antigravity; do
+  case "$a" in claude) v=$SEL_CLAUDE;; codex) v=$SEL_CODEX;; opencode) v=$SEL_OPENCODE;; *) v=$SEL_ANTIGRAVITY;; esac
+  if [ "$v" -eq 1 ]; then AGENTS_SAVED="${AGENTS_SAVED:+$AGENTS_SAVED,}$a"; fi
+done
 
 # ---------- preset: o que instalar ----------
 # No --global só existem duas versões: sem e com spec-workflow. Serena, settings.json, CLAUDE.md e
@@ -971,6 +988,7 @@ install_global() {
 
   if [ "$SEL_CLAUDE" -eq 1 ]; then agents="claude"; fi
   if [ "$SEL_CODEX" -eq 1 ];  then agents="${agents:+$agents,}codex"; fi
+  if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then agents="${agents:+$agents,}antigravity"; fi
   if [ "$HAS_SPEC" -eq 1 ]; then info "Instalando no global — versão COM spec-workflow"
   else info "Instalando no global — versão SEM spec-workflow"; fi
 
@@ -980,6 +998,7 @@ install_global() {
       case "$root" in
         claude) base="$HOME/.claude/$part";;
         codex)  [ "$part" = skills ] || continue; base="$HOME/.agents/skills";;
+        *)      continue;;   # antigravity: logo abaixo, a partir do .agents/ da fonte
       esac
       n=0
       for item in "$SRC_DIR/.claude/$part"/*; do
@@ -991,6 +1010,34 @@ install_global() {
       if [ "$n" -gt 0 ]; then ok "${base/#$HOME/~}/ ($n)"; fi
     done
   done
+
+  # ---- Antigravity: skills em pasta (commands já convertidos em skill) e agents, do .agents/ da fonte ----
+  # O 2.0 e a IDE leem ~/.gemini/config/{skills,agents}; o CLI (agy) lê skills de ~/.gemini/antigravity-cli.
+  # MCP não vai pro global do Antigravity: ele valeria em todo projeto (ver o .agents/mcp_config.json).
+  if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
+    for base in "$HOME/.gemini/config/skills" "$HOME/.gemini/antigravity-cli/skills"; do
+      case "$base" in *antigravity-cli*) [ -d "$HOME/.gemini/antigravity-cli" ] || continue;; esac
+      n=0
+      for item in "$SRC_DIR/.agents/skills"/*; do
+        [ -d "$item" ] || continue
+        name="$(basename "$item")"
+        if [ -e "$SRC_DIR/.claude/commands/$name.md" ]; then part=commands; else part=skills; fi
+        item_selected "$part" "$name" || continue
+        if global_put "$item" "$base"; then n=$((n+1)); fi
+      done
+      if [ "$n" -gt 0 ]; then ok "${base/#$HOME/~}/ ($n)"; fi
+    done
+    n=0
+    for item in "$SRC_DIR/.agents/agents"/*.md; do
+      [ -f "$item" ] || continue
+      item_selected agents "$(basename "$item" .md)" || continue
+      if global_put "$item" "$HOME/.gemini/config/agents"; then n=$((n+1)); fi
+    done
+    if [ "$n" -gt 0 ]; then ok "~/.gemini/config/agents/ ($n)"; fi
+    if [ -n "$MCP_CSV" ]; then
+      info "Antigravity: o MCP ($MCP_CSV) não vai pro global dele — valeria em todo projeto. Instale no projeto pra ter .agents/mcp_config.json."
+    fi
+  fi
 
   # ---- skills de plugins do Claude → Codex (--plugin-skills) ----
   # O Codex não roda plugin do Claude, mas lê a skill dele se ela estiver em ~/.agents/skills. O
@@ -1084,7 +1131,7 @@ BUILDISON_PARTS=$PARTS_CSV
 BUILDISON_SKILLS=$SKILLS_CSV
 BUILDISON_SUBAGENTS=$SUBAGENTS_CSV
 BUILDISON_COMMANDS=$COMMANDS_CSV
-BUILDISON_AGENTS=$agents
+BUILDISON_AGENTS=$AGENTS_SAVED
 BUILDISON_PLUGIN_SKILLS=$PLUGIN_SKILLS_CSV
 BUILDISON_ORCA=$ORCA
 EOFCFG
@@ -1331,6 +1378,13 @@ PYPIN
 # O Antigravity lê AGENTS.md da raiz (já copiado no core). Aqui espelhamos skills (pastas no padrão
 # Agent Skills; commands entram como skill e viram /<nome>) e agents (.agents/agents/<nome>.md) com os
 # mesmos filtros do .claude/, e registramos a toolbox MCP no config DO PROJETO: .agents/mcp_config.json.
+# Projeto que gera o próprio .agents/ (ex.: vibedesign, com `pnpm sync:agents` e um CI que confere a
+# sincronia) marca a pasta com GERADO.md. Escrever por cima quebraria esse check — o padrão com o
+# Antigravity incluído não pode fazer isso sozinho.
+if [ "$SEL_ANTIGRAVITY" -eq 1 ] && [ -f "$TARGET_DIR/.agents/GERADO.md" ] && ! grep -qs "gen-antigravity" "$TARGET_DIR/.agents/GERADO.md"; then
+  warn "Antigravity: o .agents/ deste projeto é gerado por um script dele (.agents/GERADO.md) — não mexo; rode o gerador do projeto."
+  SEL_ANTIGRAVITY=0
+fi
 if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
   info "Configurando Antigravity..."
   if [ -d "$SRC_DIR/.agents/skills" ]; then
@@ -1408,6 +1462,7 @@ BUILDISON_PARTS=$PARTS_CSV
 BUILDISON_SKILLS=$SKILLS_CSV
 BUILDISON_SUBAGENTS=$SUBAGENTS_CSV
 BUILDISON_COMMANDS=$COMMANDS_CSV
+BUILDISON_AGENTS=$AGENTS_SAVED
 BUILDISON_ORCA=$ORCA
 EOF
 ok ".buildison"
