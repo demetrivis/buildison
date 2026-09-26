@@ -125,6 +125,10 @@ Todas já morderam de verdade neste repo:
   (`~/.cache/chrome-devtools-mcp/chrome-profile`); a segunda sessão (outro Claude, ou o Antigravity) falha
   com "browser is already running". Toda config que o buildison gera leva `--isolated`, e o
   `devtools_unisolated`/`Get-DevtoolsUnisolated` avisa das que ele não gerou.
+- **Testar com o repo local não pega o que ficou fora do git.** O `.gitignore` tinha `logs/`, que ignorava
+  `.agents/skills/logs/` — o `/logs` do Antigravity nunca foi pro GitHub, e toda instalação via `curl`/`npx`
+  (que clonam) saía com 12 commands em vez de 13. Só apareceu na primeira execução real no Windows. Depois de
+  gerar arquivos, rode `git status --ignored .claude .agents`; e teste pelo menos uma vez pelo `curl`.
 - **O bloco `# >>> buildison >>>` do Codex guarda MCP que não é do buildison** — quem edita o
   `~/.codex/config.toml` à mão põe servidor próprio lá dentro. Regravar só o trio conhecido apagava
   isso em silêncio (aconteceu com o `computer-use`). O `keep` varre o bloco inteiro; ao mexer nele,

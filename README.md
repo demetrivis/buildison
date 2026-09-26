@@ -328,8 +328,9 @@ O que o `--orca` faz:
   carregando o guia da versão instalada (`orca skills get ...`) em vez de flags de memória.
 - **`.worktreeinclude`**: uma worktree nova é um checkout limpo, então o que está no `.gitignore` não vai
   junto. Se o `.claude/`, o `AGENTS.md` ou outro arquivo do buildison estiver fora do git neste repo, o
-  instalador o lista no `.worktreeinclude`, que o Orca copia para cada worktree nova. Se estiver tudo
-  versionado, não há o que fazer. O resto do arquivo (o seu `.env`, por exemplo) é preservado.
+  instalador o lista no `.worktreeinclude`, que o Orca copia para cada worktree nova. Se nada estiver no
+  `.gitignore`, basta commitar os arquivos instalados — a partir daí toda worktree nova os recebe. O resto do
+  `.worktreeinclude` (o seu `.env`, por exemplo) é preservado.
 - **Skills do Orca**: `orca-cli` e `orchestration` são do Orca, que as instala e atualiza. O buildison não as
   copia — só confere se estão instaladas e, se faltarem, mostra o comando (`orca skills install`).
 

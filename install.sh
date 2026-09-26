@@ -885,7 +885,7 @@ orca_worktreeinclude() {
     ok "Orca: .worktreeinclude — $(printf '%s' "$list" | tr '\n' ' ')"
   else
     if [ -s "$tmp" ]; then cp "$tmp" "$f"; elif [ -f "$f" ]; then rm -f "$f"; fi
-    ok "Orca: a toolbox está toda no git — toda worktree nova já recebe (nada a pôr no .worktreeinclude)"
+    ok "Orca: nada do buildison está no .gitignore — depois de commitar, toda worktree nova recebe (nada a pôr no .worktreeinclude)"
   fi
 }
 orca_skills_check() { # as skills do Orca são DELE: instaladas e atualizadas pelo próprio Orca

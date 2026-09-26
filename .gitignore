@@ -44,3 +44,6 @@ node_modules/
 # Logs
 *.log
 logs/
+# ...menos o /logs convertido em skill do Antigravity: sem isso ele nunca chegava ao GitHub,
+# e quem instala pelo curl/npx (que clonam) ficava sem o /logs no Antigravity.
+!.agents/skills/logs/

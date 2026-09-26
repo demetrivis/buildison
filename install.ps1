@@ -759,7 +759,7 @@ function Set-OrcaWorktreeInclude([string]$dir) {
     Ok "Orca: .worktreeinclude - $($list -join ' ')"
   } else {
     if ($rest.Count) { Write-Utf8 $f (($rest -join "`n") + "`n") } elseif (Test-Path -LiteralPath $f) { Remove-Item -Force -LiteralPath $f }
-    Ok 'Orca: a toolbox esta toda no git - toda worktree nova ja recebe (nada a por no .worktreeinclude)'
+    Ok 'Orca: nada do buildison esta no .gitignore - depois de commitar, toda worktree nova recebe (nada a por no .worktreeinclude)'
   }
 }
 function Test-OrcaSkills {
