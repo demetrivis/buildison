@@ -11,7 +11,7 @@ A fonte é única: `AGENTS.md` + `.claude/` + `docs/agent/`. Cada agente recebe 
 
 - [Início rápido](#início-rápido)
 - [Como os comandos funcionam](#como-os-comandos-funcionam)
-- [Instalar num projeto](#instalar-num-projeto) — presets, agentes, sob medida, browser, Orca, infra
+- [Instalar num projeto](#instalar-num-projeto) — presets, só contexto, agentes, sob medida, browser, Orca, infra
 - [Instalar no global](#instalar-no-global) — pra todos os projetos da máquina
 - [Atualizar](#atualizar)
 - [Memória vetorial (Qdrant)](#memória-vetorial-qdrant)
@@ -151,7 +151,57 @@ Windows:
 | `files` | `AGENTS.md`, `CLAUDE.md`, `docs/agent/`, `.claude/{agents,commands,skills}` (e `.agents/` no Antigravity) | nada |
 | `lite` | `files` + MCP `spec-workflow` + `.spec-workflow/templates/` | Node (`npx`) |
 | `full` _(padrão)_ | `lite` + MCP `serena` + `.claude/settings.json` | `uv` + Serena |
+| `context` | só o que é do projeto: `AGENTS.md`, `CLAUDE.md`, `docs/agent/` (+ MCP, se pedir). Agents, commands e skills vêm do [global](#instalar-no-global) | o global instalado |
 | `custom` | pergunta MCPs, partes e itens (só no modo interativo) | depende |
+
+### Só o contexto (junto com o global)
+
+Para quem instalou o buildison no [global](#instalar-no-global): o projeto recebe só o que é **dele** —
+`AGENTS.md`, `CLAUDE.md`, `docs/agent/` e, se você pedir, o MCP —, e agents, commands e skills vêm do global,
+sem duplicar.
+
+Mac / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset context --agents claude,codex,antigravity --yes
+```
+
+Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset context -Agents claude,codex,antigravity -Yes
+```
+
+Com spec-workflow no projeto (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset context --mcp spec-workflow --agents claude,codex,antigravity --yes
+```
+
+Com spec-workflow no projeto (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset context -Mcp spec-workflow -Agents claude,codex,antigravity -Yes
+```
+
+Com o contexto do Orca (Mac / Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/demetrivis/buildison/main/install.sh | bash -s -- --preset context --agents claude,codex,antigravity --orca --yes
+```
+
+Com o contexto do Orca (Windows):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/demetrivis/buildison/main/install.ps1))) -Preset context -Agents claude,codex,antigravity -Orca -Yes
+```
+
+- Se o global ainda não estiver instalado na máquina, o instalador avisa e mostra o comando.
+- A skill do spec-workflow vem do global: para usar o spec-workflow num projeto `context`, instale o global na
+  versão com spec-workflow (`--preset lite`).
+- Trocando um projeto de `files`/`lite`/`full` para `context`, o instalador lista os agents, commands e skills
+  do buildison que ficaram no `.claude/` do projeto e vão duplicar com o global. Ele não apaga — podem ter sido
+  customizados.
 
 ### Escolher os agentes
 
@@ -494,8 +544,22 @@ Tirar as skills de plugin (Windows):
 - Ficam de fora do global, por serem de um projeto só: `AGENTS.md`, `CLAUDE.md`, `docs/agent/`, o
   `settings.json` e o Serena. O OpenCode ainda não tem instalação global.
 
-> **Global ou por projeto, não os dois.** Com os dois, os mesmos agents e skills aparecem duplicados. O
-> install por projeto avisa quando detecta o global.
+> **Global e projeto completo, não os dois.** Com os dois, os mesmos agents e skills aparecem duplicados — o
+> install por projeto avisa quando detecta o global. Para combinar os dois, use o
+> [preset `context`](#só-o-contexto-junto-com-o-global) no projeto: ele instala só o que é do projeto.
+
+### Global ou por projeto?
+
+| | Por projeto (`files`/`lite`/`full`) | Global + `context` no projeto |
+| :-- | :-- | :-- |
+| Agents, commands e skills | no repo — vão junto no git | na máquina — um comando atualiza tudo |
+| Outra máquina, colega, CI | recebem pelo git | precisam do global instalado |
+| `AGENTS.md`, `context.md`, `decisions.md` | sim | sim |
+| MCP do projeto (inclusive no Antigravity) | sim | sim |
+| Worktrees do Orca | recebem o que estiver no git | recebem sem configurar nada |
+
+Projeto de time, ou que roda em mais de uma máquina: por projeto. Muitos projetos só seus, na mesma máquina:
+global + `context`.
 
 ---
 
@@ -781,7 +845,7 @@ uv tool install -p 3.13 serena-agent && serena init
 | :-- | :-- | :-- |
 | `--dir <pasta>` | `-Dir <pasta>` | Onde instalar (padrão: pasta atual) |
 | `--agents <lista>` | `-Agents <lista>` | `claude`, `codex`, `opencode`, `antigravity` (padrão: `claude,codex,antigravity`) |
-| `--preset <nome>` | `-Preset <nome>` | `files`, `lite`, `full` (padrão) ou `custom` |
+| `--preset <nome>` | `-Preset <nome>` | `files`, `lite`, `full` (padrão), `context` ou `custom` |
 | `--mcp <lista>` | `-Mcp <lista>` | `spec-workflow`, `serena`, `chrome-devtools` ou `none` |
 | `--parts <lista>` | `-Parts <lista>` | `agents`, `commands`, `skills`, `settings` |
 | `--skills <lista>` | `-Skills <lista>` | Só estas skills |

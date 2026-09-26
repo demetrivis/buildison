@@ -9,6 +9,8 @@
 #   ./install.sh --preset files           # SÓ arquivos (agents/skills/commands) — sem MCP e sem infra
 #   ./install.sh --preset lite            # arquivos + MCP spec-workflow
 #   ./install.sh --preset full            # + serena + .claude/settings.json (default)
+#   ./install.sh --preset context         # SÓ o contexto do projeto (AGENTS.md, CLAUDE.md, docs/agent/, MCP):
+#                                         # agents, commands e skills vêm do --global, sem duplicar
 #   ./install.sh --list                   # presets, MCPs, agents, skills e commands disponíveis
 #   ./install.sh --update                 # ATUALIZA repo que já tem buildison (ver abaixo)
 #   ./install.sh --global                 # instala no GLOBAL (~/.claude, ~/.agents/skills) — ver abaixo
@@ -46,7 +48,7 @@
 #
 # Agentes suportados: claude, codex, opencode, antigravity. Padrão: claude,codex,antigravity
 # (no --global: claude, codex e antigravity)
-# Flags: --dir <path> --agents <lista> --preset files|lite|full|custom --mcp --parts --skills
+# Flags: --dir <path> --agents <lista> --preset files|lite|full|context|custom --mcp --parts --skills
 #        --subagents --commands --list --infra/--no-infra --serena/--no-serena
 #        --yes --force --update --global --plugin-skills --orca/--no-orca
 #
@@ -283,7 +285,7 @@ while [ $# -gt 0 ]; do
     *) die "Argumento desconhecido: $1 (use --help)";;
   esac
 done
-case "$PRESET" in ""|files|lite|full|custom) ;; *) die "--preset deve ser files, lite, full ou custom (recebido: $PRESET)";; esac
+case "$PRESET" in ""|files|lite|full|context|custom) ;; *) die "--preset deve ser files, lite, full, context ou custom (recebido: $PRESET)";; esac
 [ "$PRESET" = "custom" ] && ASK_CUSTOM=1
 
 # ---------- localizar a fonte (repo clonado ou clonar em temp p/ curl|bash) ----------
@@ -327,6 +329,7 @@ if [ "$LIST" -eq 1 ]; then
   echo "  files   só arquivos — AGENTS.md, docs/agent/, agents, commands, skills. Sem MCP e sem infra."
   echo "  lite    files + MCP spec-workflow (planejamento). Nada pra instalar na máquina."
   echo "  full    lite + serena + .claude/settings.json  (default)"
+  echo "  context só o contexto do projeto (AGENTS.md, CLAUDE.md, docs/agent/, MCP) — agents/skills vêm do --global"
   echo "  custom  pergunta MCPs, partes e quais itens"
   echo ""
   printf "${c_bold}MCPs${c_reset} (--mcp, ou none)\n"
@@ -472,14 +475,17 @@ if [ "$PRESET_SET" -eq 0 ] && [ "$MCP_SET" -eq 0 ] && [ "$PARTS_SET" -eq 0 ]; th
     printf "  2) Leve        — arquivos + spec-workflow (planejamento). Nada pra instalar na máquina.\n"
     printf "  3) Completo    — leve + Serena + settings.json do Claude\n"
     printf "  4) Sob medida  — escolho os MCPs e quais agents/skills/commands\n"
+    printf "  5) Só contexto — AGENTS.md, CLAUDE.md e docs/agent/; agents e skills vêm do --global\n"
     pr=""; printf "Escolha [3]: "; prompt_read pr
-    case "$pr" in 1) PRESET=files;; 2) PRESET=lite;; 4) PRESET=custom; ASK_CUSTOM=1;; *) PRESET=full;; esac
+    case "$pr" in 1) PRESET=files;; 2) PRESET=lite;; 4) PRESET=custom; ASK_CUSTOM=1;; 5) PRESET=context;; *) PRESET=full;; esac
   fi
 fi
 [ -z "$PRESET" ] && PRESET="custom"   # veio só --mcp/--parts: parte dos defaults do full
 
 case "$PRESET" in
   files) DEF_MCP="";                            DEF_PARTS="agents,commands,skills";;
+  # só o que é do projeto: agents/commands/skills ficam com o --global (instalar aqui também duplicaria)
+  context) DEF_MCP="";                          DEF_PARTS="";;
   lite)  DEF_MCP="spec-workflow";               DEF_PARTS="agents,commands,skills";;
   *)     DEF_MCP="spec-workflow,serena";        DEF_PARTS="agents,commands,skills,settings";;
 esac
@@ -544,6 +550,7 @@ norm_parts() {
       agents|subagents)          x=agents;;
       commands|skills|settings)  ;;
       all|tudo)                  out="agents,commands,skills,settings"; continue;;
+      none|nenhum)               continue;;
       *) die "--parts: '$x' desconhecido (use agents, commands, skills, settings)";;
     esac
     csv_has "$out" "$x" || out="${out:+$out,}$x"
@@ -656,7 +663,7 @@ render_tagged() { # src dst
   ' "$1" > "$2"
 }
 
-info "Instalando: preset $PRESET · MCP: ${MCP_CSV:-nenhum} · partes: $PARTS_CSV"
+info "Instalando: preset $PRESET · MCP: ${MCP_CSV:-nenhum} · partes: ${PARTS_CSV:-nenhuma (vêm do --global)}"
 
 # ---------- Codex: helpers do ~/.codex/config.toml (usados no install por projeto e no --global) ----------
 # O config.toml é GLOBAL e os nomes de tabela ([mcp_servers.serena] etc) são fixos. Em TOML
@@ -1240,8 +1247,8 @@ add_entry() { if [ -n "$ENTRIES" ]; then ENTRIES="$ENTRIES,"$'\n'; fi; ENTRIES="
 # ---------- Claude Code ----------
 if [ "$SEL_CLAUDE" -eq 1 ]; then
   info "Configurando Claude Code..."
-  if [ -s "$GLOBAL_MAN" ]; then
-    warn "o buildison também está no global (~/.claude): neste projeto os agents, commands e skills vão aparecer duplicados"
+  if [ -s "$GLOBAL_MAN" ] && { csv_has "$PARTS_CSV" agents || csv_has "$PARTS_CSV" commands || csv_has "$PARTS_CSV" skills; }; then
+    warn "o buildison também está no global (~/.claude): neste projeto os agents, commands e skills vão aparecer duplicados — use --preset context"
   fi
   # Item a item (não a pasta inteira) pra respeitar preset/filtros. O destino de cada cp é
   # a pasta PAI (.claude/skills/), então skill que já existe é mesclada, não aninhada.
@@ -1417,7 +1424,11 @@ if [ "$SEL_ANTIGRAVITY" -eq 1 ]; then
       item_selected agents "$(basename "$f" .md)" || continue
       mkdir -p "$TARGET_DIR/.agents/agents"; cp -f "$f" "$TARGET_DIR/.agents/agents/"; a=$((a+1))
     done
-    ok ".agents/ ($n skills + $c commands como skill, $a agents)"
+    if [ $((n + c + a)) -eq 0 ] && [ "$PRESET" = "context" ]; then
+      ok "Antigravity: skills e agents vêm do global (preset context)"
+    else
+      ok ".agents/ ($n skills + $c commands como skill, $a agents)"
+    fi
   else
     warn ".agents/skills não existe na fonte — rode 'node scripts/gen-antigravity.mjs' no repo buildison."
   fi
@@ -1489,6 +1500,28 @@ if [ "$CODEX_FAILED" -eq 1 ]; then
   warn "Codex NÃO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo."
 fi
 devtools_warn "$TARGET_DIR"
+if [ "$PRESET" = "context" ]; then
+  # troca de um preset completo pra context: o que o buildison pôs antes no .claude/ continua lá e duplica
+  # com o global. Não apagamos — pode ter sido customizado —, só listamos.
+  LEFT=""
+  for part in agents commands skills; do
+    for item in "$SRC_DIR/.claude/$part"/*; do
+      [ -e "$item" ] || continue
+      [ -e "$TARGET_DIR/.claude/$part/$(basename "$item")" ] && LEFT="$LEFT .claude/$part/$(basename "$item")"
+    done
+  done
+  if [ -n "$LEFT" ]; then
+    echo ""
+    warn "preset context: estes itens do buildison continuam no .claude/ do projeto e vão duplicar com o global:"
+    printf '%s\n' $LEFT | sed 's/^/    /' | head -40
+    warn "Apague os que você não customizou (o global já tem a versão atual)."
+  fi
+  if [ ! -s "$GLOBAL_MAN" ]; then
+    echo ""
+    warn "preset context: agents, commands e skills vêm do --global, e ele ainda não está instalado nesta máquina."
+    warn "  Rode: install.sh --global --agents claude,codex,antigravity --yes"
+  fi
+fi
 
 if [ -n "$INFRA_PGPASS" ]; then
   echo ""

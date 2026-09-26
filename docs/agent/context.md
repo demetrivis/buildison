@@ -73,6 +73,10 @@ Doc do Orca: `https://www.onorca.dev/docs` (sem `llms.txt`; HTML).
 em vez de impor o trio. `.agents/GERADO.md` de gerador alheio → o Antigravity é pulado naquele projeto.
 **README entra em toda mudança** de comportamento do instalador — é pedido fixo do usuário.
 
+**Preset `context`:** `DEF_PARTS=""` — o projeto recebe só o core (`AGENTS.md`, `CLAUDE.md`, `docs/agent/`),
+MCP se pedido, e a camada Orca; agents/commands/skills ficam com o `--global`. É o par pensado pro global: o
+aviso de duplicação só dispara quando o projeto também instala agents/commands/skills.
+
 **Dois destinos:** projeto (default) ou `--global` (`~/.claude/{agents,commands,skills}` pro Claude,
 `~/.agents/skills` pro Codex, `~/.gemini/config/{skills,agents}` + `~/.gemini/antigravity-cli/skills` pro
 Antigravity — sem MCP no global dele). O global tem só duas versões — `--preset files` (sem spec-workflow) e

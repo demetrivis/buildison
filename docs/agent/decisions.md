@@ -16,6 +16,22 @@ Formato por entrada:
 
 ---
 
+## 2026-09-26 — Preset `context`: global pros agents/skills, projeto só com o contexto
+
+**Contexto:** o global e o install por projeto não combinavam — instalar os dois duplicava agents e skills,
+e o global sozinho não entrega o que é do projeto (`AGENTS.md`, `context.md`, `decisions.md`, MCP por projeto
+do Antigravity, regras do Orca). Pediu-se um "modo só contexto".
+
+**Decisão:** preset `context`, com `DEF_PARTS` vazio: só o core, o MCP pedido e a camada Orca. O aviso de
+duplicação com o global passa a disparar só quando o projeto também instala agents/commands/skills. Sem o
+global na máquina, o `context` avisa e mostra o comando. Trocando um projeto de outro preset pra `context`, lista
+o que ficou no `.claude/` e duplica — sem apagar, porque pode ter customização.
+
+**Motivo:** reaproveita o mecanismo de partes que já filtrava `.claude/` e `.agents/`, sem caminho novo no
+instalador. `--parts none` passou a ser aceito pelo mesmo motivo.
+
+**Impacto:** a skill do spec-workflow não vem num projeto `context` — ela vem do global na versão `lite`.
+
 ## 2026-09-26 — O trio Claude Code + Codex + Antigravity vira o padrão
 
 **Contexto:** o usuário opera com essas três IAs e pediu que elas sejam sempre o padrão — os exemplos do README

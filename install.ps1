@@ -16,6 +16,7 @@ Presets (-Preset):
   files   so arquivos: AGENTS.md, docs\agent, agents, commands, skills. Sem MCP e sem infra.
   lite    files + MCP spec-workflow
   full    lite + serena + .claude\settings.json (default)
+  context so o contexto do projeto (AGENTS.md, CLAUDE.md, docs\agent, MCP) - agents e skills vem do -Global
   custom  pergunta MCPs, partes e itens
 
 Sob medida (partem do preset e sobrescrevem so o que for passado):
@@ -49,7 +50,7 @@ Flags: -Dir -Agents -Preset -Mcp -Parts -Skills -Subagents -Commands -List -Infr
 param(
   [string]$Dir = "",
   [string[]]$Agents = @(),
-  [ValidateSet('','files','lite','full','custom')] [string]$Preset = "",
+  [ValidateSet('','files','lite','full','context','custom')] [string]$Preset = "",
   [string[]]$Mcp = @(),
   [string[]]$Parts = @(),
   [string[]]$Skills = @(),
@@ -131,10 +132,11 @@ function ConvertTo-PartsCsv($v) {
       '^(agents|subagents)$'         { 'agents'; break }
       '^(commands|skills|settings)$' { $x.ToLower(); break }
       '^(all|tudo)$'                 { 'ALL'; break }
+      '^(none|nenhum)$'              { ''; break }
       default { Die "-Parts: '$x' desconhecido (use agents, commands, skills, settings)" }
     }
     if ($n -eq 'ALL') { $out = @('agents', 'commands', 'skills', 'settings') }
-    elseif ($out -notcontains $n) { $out += $n }
+    elseif ($n -and ($out -notcontains $n)) { $out += $n }
   }
   $out -join ','
 }
@@ -373,6 +375,7 @@ if ($List) {
   Write-Host "  files   so arquivos - AGENTS.md, docs\agent, agents, commands, skills. Sem MCP e sem infra."
   Write-Host "  lite    files + MCP spec-workflow (planejamento). Nada pra instalar na maquina."
   Write-Host "  full    lite + serena + .claude\settings.json  (default)"
+  Write-Host "  context so o contexto do projeto (AGENTS.md, CLAUDE.md, docs\agent, MCP) - agents/skills vem do -Global"
   Write-Host "  custom  pergunta MCPs, partes e quais itens"
   Write-Host "`nMCPs (-Mcp, ou none)" -ForegroundColor White
   Write-Host "  spec-workflow  planejamento requirements -> design -> tasks (npx, nada a instalar)"
@@ -531,11 +534,13 @@ if (-not $presetSet -and -not $mcpSet -and -not $partsSet) {
     Write-Host "  2) Leve        - arquivos + spec-workflow (planejamento). Nada pra instalar na maquina."
     Write-Host "  3) Completo    - leve + Serena + settings.json do Claude"
     Write-Host "  4) Sob medida  - escolho os MCPs e quais agents/skills/commands"
+    Write-Host "  5) So contexto - AGENTS.md, CLAUDE.md e docs\agent; agents e skills vem do -Global"
     $pr = Read-Host "Escolha [3]"
     switch ($pr) {
       '1'     { $Preset = 'files' }
       '2'     { $Preset = 'lite' }
       '4'     { $Preset = 'custom'; $askCustom = $true }
+      '5'     { $Preset = 'context' }
       default { $Preset = 'full' }
     }
   }
@@ -543,6 +548,8 @@ if (-not $presetSet -and -not $mcpSet -and -not $partsSet) {
 if (-not $Preset) { $Preset = 'custom' }   # veio so -Mcp/-Parts: parte dos defaults do full
 switch ($Preset) {
   'files' { $defMcp = '';                            $defParts = 'agents,commands,skills' }
+  # so o que e do projeto: agents/commands/skills ficam com o -Global (instalar aqui tambem duplicaria)
+  'context' { $defMcp = '';                          $defParts = '' }
   'lite'  { $defMcp = 'spec-workflow';               $defParts = 'agents,commands,skills' }
   default { $defMcp = 'spec-workflow,serena'; $defParts = 'agents,commands,skills,settings' }
 }
@@ -628,7 +635,7 @@ if ($Preset -eq 'full' -or $doInfra -or $Global) { $Tags += 'infra' }
 if ($useOrca)   { $Tags += 'orca' }
 
 $mcpLabel = if ($McpCsv) { $McpCsv } else { 'nenhum' }
-Info "Instalando: preset $Preset | MCP: $mcpLabel | partes: $PartsCsv"
+Info "Instalando: preset $Preset | MCP: $mcpLabel | partes: $(if ($PartsCsv) { $PartsCsv } else { nenhuma (vem do -Global) })"
 
 # ---------- -Global: instala pra todos os projetos da maquina ----------
 # O manifest (~\.buildison\global.manifest) lista o que ESTE modo pos no disco. E o que separa
@@ -1035,7 +1042,7 @@ function Get-AntigravityGlobalPinned {
 # ---------- Claude Code ----------
 if ($selClaude) {
   Info "Configurando Claude Code..."
-  if ((Test-Path -LiteralPath $globalMan) -and (Get-Item -LiteralPath $globalMan).Length -gt 0) {
+  if ((Test-Path -LiteralPath $globalMan) -and (Get-Item -LiteralPath $globalMan).Length -gt 0 -and ((Test-Csv $PartsCsv 'agents') -or (Test-Csv $PartsCsv 'commands') -or (Test-Csv $PartsCsv 'skills'))) {
     Warn "o buildison tambem esta no global (~\.claude): neste projeto os agents, commands e skills vao aparecer duplicados"
   }
   foreach ($part in 'agents', 'commands', 'skills') {
@@ -1169,7 +1176,8 @@ if ($selAntigravity) {
         if (Test-ItemSelected 'agents' ($f.Name -replace '\.md$', '')) { Copy-Tree $f (Join-Path $Target '.agents\agents'); $na++ }
       }
     }
-    Ok ".agents\ ($ns skills + $nc commands como skill, $na agents)"
+    if (($ns + $nc + $na) -eq 0 -and $Preset -eq 'context') { Ok 'Antigravity: skills e agents vem do global (preset context)' }
+    else { Ok ".agents\ ($ns skills + $nc commands como skill, $na agents)" }
   } else {
     Warn ".agents\skills nao existe na fonte - rode 'node scripts/gen-antigravity.mjs' no repo buildison."
   }
@@ -1333,6 +1341,29 @@ Write-Host ""
 Ok "Instalacao concluida em $Target (preset $Preset | MCP: $mcpLabel)"
 if ($codexFailed) { Warn "Codex NAO foi configurado: conserte as tabelas repetidas no ~/.codex/config.toml e rode de novo." }
 Show-DevtoolsWarn $Target
+if ($Preset -eq 'context') {
+  # troca de um preset completo pra context: o que o buildison pos antes no .claude\ continua la e duplica
+  # com o global. Nao apagamos - pode ter sido customizado -, so listamos.
+  $left = @()
+  foreach ($part in 'agents', 'commands', 'skills') {
+    $pdir = Join-Path $src ".claude\$part"
+    if (-not (Test-Path $pdir)) { continue }
+    foreach ($item in (Get-ChildItem -LiteralPath $pdir)) {
+      if (Test-Path -LiteralPath (Join-Path $Target ".claude\$part\$($item.Name)")) { $left += ".claude\$part\$($item.Name)" }
+    }
+  }
+  if ($left.Count) {
+    Write-Host ""
+    Warn 'preset context: estes itens do buildison continuam no .claude\ do projeto e vao duplicar com o global:'
+    foreach ($l in ($left | Select-Object -First 40)) { Write-Host "    $l" }
+    Warn 'Apague os que voce nao customizou (o global ja tem a versao atual).'
+  }
+  if (-not ((Test-Path -LiteralPath $globalMan) -and (Get-Item -LiteralPath $globalMan).Length -gt 0)) {
+    Write-Host ""
+    Warn 'preset context: agents, commands e skills vem do -Global, e ele ainda nao esta instalado nesta maquina.'
+    Warn '  Rode: install.ps1 -Global -Agents claude,codex,antigravity -Yes'
+  }
+}
 if ($infraPass) {
   Write-Host "`nlocal-infra criado - guarde a credencial:" -ForegroundColor White
   Write-Host "  Postgres user: dev"
